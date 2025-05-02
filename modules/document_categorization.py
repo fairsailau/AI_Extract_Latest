@@ -189,8 +189,7 @@ def document_categorization():
                             
                             # Check if second-stage is needed
                             if use_two_stage and result["confidence"] < confidence_threshold:
-                                st.info(f"Low confidence ({result[\'confidence\']:.2f}) for {file_name}, performing detailed analysis...")
-                                
+                                st.info(f"Low confidence ({result['confidence']:.2f}) for {file_name}, performing detailed analysis...")
                                 # Second-stage categorization with more detailed prompt
                                 detailed_result = categorize_document_detailed(file_id, selected_model, result["document_type"])
                                 
@@ -208,8 +207,7 @@ def document_categorization():
                         
                         # Calculate multi-factor confidence
                         # Extract names for calculation function
-                        document_type_names = [dtype[\'name\'] for dtype in st.session_state.document_types]
-                        
+                        document_type_names = [dtype["name"] for dtype in st.session_state.document_types]                      
                         multi_factor_confidence = calculate_multi_factor_confidence(
                             result["confidence"],
                             document_features,
@@ -321,8 +319,8 @@ def configure_document_types():
                 )
                 if new_name != current_name and not is_other_type:
                     # Check for duplicate names before updating
-                    if any(d[\'name\'] == new_name for j, d in enumerate(st.session_state.document_types) if i != j):
-                        st.warning(f"Document type name \'{new_name}\' already exists.")
+                    if any(d["name"] == new_name for j, d in enumerate(st.session_state.document_types) if i != j):
+                        st.warning(f"Document type name 	'{new_name}' already exists.")
                     else:
                         st.session_state.document_types[i]["name"] = new_name
                         logger.info(f"Updated document type name at index {i} to: {new_name}")
