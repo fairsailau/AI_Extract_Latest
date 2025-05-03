@@ -226,7 +226,7 @@ with st.sidebar:
         st.write(f"{template_count} templates loaded")
         if hasattr(st.session_state, "template_cache_timestamp") and st.session_state.template_cache_timestamp:
             cache_time = datetime.fromtimestamp(st.session_state.template_cache_timestamp)
-            st.write(f"Last updated: {cache_time.strftime(\"%Y-%m-%d %H:%M:%S\")}") # Corrected format string quotes
+            st.write(f"Last updated: {cache_time.strftime('%Y-%m-%d %H:%M:%S')}") # Corrected format string quotes
         if st.button("Refresh Templates", key="refresh_templates_btn"):
             with st.spinner("Refreshing metadata templates..."):
                 templates = get_metadata_templates(st.session_state.client, force_refresh=True)
