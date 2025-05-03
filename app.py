@@ -14,7 +14,7 @@ from pathlib import Path
 # Configure logging
 # Corrected format string with standard single quotes
 logging.basicConfig(level=logging.INFO, 
-                   format=\'%(asctime)s - %(name)s - %(levelname)s - %(message)s\')
+                   format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Add the parent directory to sys.path
