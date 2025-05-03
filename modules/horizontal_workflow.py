@@ -49,30 +49,14 @@ workflow_steps = [
     }
 ]
 
-def navigate_to_step(page_id):
-    """Callback function to update the current page."""
-    # Check if the target page is valid and allowed (i.e., not a future step)
-    target_index = -1
-    current_index = -1
-    for i, step in enumerate(workflow_steps):
-        if step["page"] == page_id:
-            target_index = i
-        if step["page"] == st.session_state.current_page:
-            current_index = i
-            
-    if target_index != -1 and target_index <= current_index:
-        logger.info(f"Navigating to step: {page_id}")
-        st.session_state.current_page = page_id
-        # Optional: Add logic here to reset state for future steps if needed
-        # This part needs careful consideration based on application logic
-        # For now, just navigate.
-        st.rerun() # Rerun to reflect the page change
-    else:
-        logger.warning(f"Attempted to navigate to invalid step: {page_id}")
+# Removed navigate_to_step function as navigation is handled by sidebar now
+# def navigate_to_step(page_id):
+#     ...
 
 def display_horizontal_workflow(current_page_id: str):
     """
     Displays the horizontal workflow indicator using Salesforce-style chevrons.
+    This version is purely visual and does not handle clicks.
 
     Args:
         current_page_id: The page ID of the current step (e.g., "Home", "File Browser").
@@ -86,9 +70,6 @@ def display_horizontal_workflow(current_page_id: str):
             break
             
     # Inject CSS for chevron styling
-    # Adapted from various online CSS chevron examples
-    # Note: Direct click handling on these HTML elements to trigger Streamlit callbacks is not straightforward.
-    # We use st.button overlaid for interaction.
     css = """
     <style>
         .chevron-container {
@@ -110,7 +91,7 @@ def display_horizontal_workflow(current_page_id: str):
             min-width: 120px; /* Minimum width for each step */
             white-space: nowrap;
             border: 1px solid #ced4da;
-            cursor: default; /* Default cursor */
+            cursor: default; /* Default cursor - not clickable */
         }
         .chevron-step::before, .chevron-step::after {
             content: "";
@@ -155,18 +136,15 @@ def display_horizontal_workflow(current_page_id: str):
         .chevron-step-completed {
             background-color: #cfe2ff; /* Light blue background */
             color: #052c65; /* Dark blue text */
-            cursor: pointer; /* Make clickable */
             border-color: #9ec5fe;
+            /* cursor: pointer; Removed - not clickable */
         }
         .chevron-step-completed::after {
             border-left-color: #cfe2ff; /* Match completed background */
         }
-        .chevron-step-completed:hover {
-            background-color: #b6d4fe; /* Slightly darker blue on hover */
-        }
-        .chevron-step-completed:hover::after {
-            border-left-color: #b6d4fe;
-        }
+        /* Removed hover styles as it's not interactive */
+        /* .chevron-step-completed:hover { ... } */
+        /* .chevron-step-completed:hover::after { ... } */
 
         /* Current Step Styling */
         .chevron-step-current {
@@ -180,20 +158,8 @@ def display_horizontal_workflow(current_page_id: str):
             border-left-color: #0d6efd; /* Match current background */
         }
         
-        /* Link styling within chevrons */
-        .chevron-step a {
-            color: inherit; /* Inherit color from parent */
-            text-decoration: none;
-            display: block; /* Make link fill the step */
-            padding: inherit; /* Use parent padding */
-            margin: -0.5rem -1rem -0.5rem -2rem; /* Fill padding area */
-        }
-        .chevron-step:first-child a {
-             margin-left: -1rem; /* Adjust for first step */
-        }
-        .chevron-step:last-child a {
-             margin-right: -1rem; /* Adjust for last step */
-        }
+        /* Removed link styling as it's not interactive */
+        /* .chevron-step a { ... } */
 
     </style>
     """
@@ -205,25 +171,19 @@ def display_horizontal_workflow(current_page_id: str):
     for i, step in enumerate(workflow_steps):
         # Determine CSS class based on status
         status_class = ""
-        is_clickable = False
         if i < current_step_index:
             status_class = "chevron-step-completed"
-            is_clickable = True
         elif i == current_step_index:
             status_class = "chevron-step-current"
-            is_clickable = False # Current step not clickable to itself
         else:
-            status_class = "chevron-step-upcoming"
-            is_clickable = False
+            status_class = "chevron-step-upcoming" # Default class defined above
 
         step_html = f"<div class=\"chevron-step {status_class}\" "
-        step_html += f" title=\"{step['title']}\">"
+        step_html += f" title=\"{step['title']} (Step {i+1})\">" # Add step number to title
         
-        # Use Streamlit buttons overlaid for click handling (more reliable than HTML links)
-        # We place buttons in columns *after* rendering the visual chevrons.
-        # This HTML is purely for visual representation.
-        step_html += f"{step['title']}" # Display title
-        # Add checkmark for completed steps? (Optional)
+        # Display title
+        step_html += f"{step['title']}"
+        # Add checkmark for completed steps
         if i < current_step_index:
              step_html += " ✓"
              
@@ -235,25 +195,8 @@ def display_horizontal_workflow(current_page_id: str):
     # Render the visual chevrons
     st.markdown(html_content, unsafe_allow_html=True)
 
-    # --- Click Handling using overlaid st.button --- 
-    # Create columns matching the number of steps
-    cols = st.columns(len(workflow_steps))
-    for i, step in enumerate(workflow_steps):
-        with cols[i]:
-            is_clickable = i < current_step_index # Only allow clicking on *previous* completed steps
-            # Create a mostly invisible button to capture clicks
-            # Styling these buttons perfectly over the chevrons is hard.
-            # This provides functionality but might not align perfectly.
-            st.button(
-                label=" "* (i+1), # Use spaces for label, unique key needed
-                key=f"nav_btn_{step['id']}",
-                on_click=navigate_to_step,
-                args=(step["page"],),
-                disabled=not is_clickable,
-                use_container_width=True,
-                help=f"Go to {step['title']}" if is_clickable else step['title']
-            )
-            # Add a small visual cue below the button column to show what it represents
-            # st.caption(f"{step['title']}") # This might clutter the UI
+    # --- REMOVED Click Handling Section --- 
+    # The st.columns and st.button logic previously here has been removed.
+    # Navigation is now handled by the sidebar buttons in app.py.
 
 
