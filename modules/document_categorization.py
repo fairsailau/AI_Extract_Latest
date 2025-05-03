@@ -8,10 +8,12 @@ import datetime
 import pandas as pd
 import altair as alt
 from typing import Dict, Any, List, Optional, Tuple
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
 def document_categorization():
     """
     Enhanced document categorization with improved confidence metrics
@@ -207,7 +209,8 @@ def document_categorization():
                         
                         # Calculate multi-factor confidence
                         # Extract names for calculation function
-                        document_type_names = [dtype["name"] for dtype in st.session_state.document_types]                      
+                        document_type_names = [dtype["name"] for dtype in st.session_state.document_types]
+                        
                         multi_factor_confidence = calculate_multi_factor_confidence(
                             result["confidence"],
                             document_features,
@@ -320,7 +323,7 @@ def configure_document_types():
                 if new_name != current_name and not is_other_type:
                     # Check for duplicate names before updating
                     if any(d["name"] == new_name for j, d in enumerate(st.session_state.document_types) if i != j):
-                        st.warning(f"Document type name 	'{new_name}' already exists.")
+                        st.warning(f"Document type name '{new_name}' already exists.")
                     else:
                         st.session_state.document_types[i]["name"] = new_name
                         logger.info(f"Updated document type name at index {i} to: {new_name}")
@@ -355,7 +358,7 @@ def configure_document_types():
         indices_to_delete.sort(reverse=True)
         for index in indices_to_delete:
             deleted_type = st.session_state.document_types.pop(index)
-            logger.info(f"Deleted document type: {deleted_type.get(\'name\')}")
+            logger.info(f"Deleted document type: {deleted_type.get('name')}")
         st.rerun() # Rerun after deletion to update the UI
 
     # Add new document type section
@@ -365,8 +368,8 @@ def configure_document_types():
     
     if st.button("Add Document Type") and new_type_name:
         # Check if name already exists
-        if any(d[\'name\'] == new_type_name for d in st.session_state.document_types):
-            st.warning(f"Document type name \'{new_type_name}\' already exists.")
+        if any(d['name'] == new_type_name for d in st.session_state.document_types):
+            st.warning(f"Document type name '{new_type_name}' already exists.")
         else:
             new_doc_type = {"name": new_type_name, "description": new_type_desc}
             st.session_state.document_types.append(new_doc_type)
@@ -401,7 +404,7 @@ def display_categorization_results():
         return
     
     # Extract category names for UI elements
-    document_type_names = [dtype[\'name\'] for dtype in st.session_state.document_types]
+    document_type_names = [dtype['name'] for dtype in st.session_state.document_types]
     
     # Create tabs for different views
     tab1, tab2 = st.tabs(["Table View", "Detailed View"])
@@ -428,7 +431,7 @@ def display_categorization_results():
             results_data.append({
                 "File Name": result.get("file_name", "Unknown"),
                 "Document Type": result.get("document_type", "N/A"),
-                "Confidence": f"<span style=\'color: {confidence_color};\'>{confidence_level} ({confidence:.2f})</span>",
+                "Confidence": f"<span style='color: {confidence_color};'>{confidence_level} ({confidence:.2f})</span>",
                 "Status": status
             })
         
@@ -452,7 +455,7 @@ def display_categorization_results():
              
         for file_id, result in results.items():
             with st.container(border=True):
-                st.write(f"### {result.get(\'file_name\', \'Unknown\')}")
+                st.write(f"### {result.get('file_name', 'Unknown')}")
                 
                 col1, col2 = st.columns([2, 1])
                 
@@ -504,8 +507,8 @@ def display_categorization_results():
                     # Display first-stage results if available
                     if result.get("first_stage_type"):
                         with st.expander("First-Stage Results", expanded=False):
-                            st.write(f"**First-stage category:** {result[\'first_stage_type\']}")
-                            st.write(f"**First-stage confidence:** {result[\'first_stage_confidence\']:.2f}")
+                            st.write(f"**First-stage category:** {result['first_stage_type']}")
+                            st.write(f"**First-stage confidence:** {result['first_stage_confidence']:.2f}")
                 
                 with col2:
                     # Category override
@@ -570,9 +573,9 @@ def categorize_document(file_id: str, model: str = "azure__openai__gpt_4o_mini")
     """
     # Get access token from client
     access_token = None
-    if hasattr(st.session_state.client, 	\'_oauth\'):
+    if hasattr(st.session_state.client, '_oauth'):
         access_token = st.session_state.client._oauth.access_token
-    elif hasattr(st.session_state.client, \'auth\') and hasattr(st.session_state.client.auth, \'access_token\'):
+    elif hasattr(st.session_state.client, 'auth') and hasattr(st.session_state.client.auth, 'access_token'):
         access_token = st.session_state.client.auth.access_token
     
     if not access_token:
@@ -580,17 +583,17 @@ def categorize_document(file_id: str, model: str = "azure__openai__gpt_4o_mini")
     
     # Set headers
     headers = {
-        \'Authorization\': f\'Bearer {access_token}\',
-        \'Content-Type\': \'application/json\'
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
     }
     
     # Get document types (list of dicts) from session state
     document_types_with_desc = st.session_state.document_types
-    document_type_names = [dtype[\'name\'] for dtype in document_types_with_desc]
+    document_type_names = [dtype['name'] for dtype in document_types_with_desc]
     
     # Create prompt for document categorization with confidence score request
     # Include descriptions in the prompt
-    category_options_text = "\n".join([f"- {dtype[\'name\']}: {dtype[\'description\']}" for dtype in document_types_with_desc])
+    category_options_text = "\n".join([f"- {dtype['name']}: {dtype['description']}" for dtype in document_types_with_desc])
     
     prompt = (
         f"Analyze this document and determine which category it belongs to from the following options:\n"
@@ -636,7 +639,7 @@ def categorize_document(file_id: str, model: str = "azure__openai__gpt_4o_mini")
             error_details = "Unknown error"
             try:
                 error_json = response.json()
-                error_details = error_json.get(\'message\', response.text)
+                error_details = error_json.get('message', response.text)
             except json.JSONDecodeError:
                 error_details = response.text
             raise Exception(f"Error in Box AI API call: {response.status_code}. Details: {error_details}")
@@ -659,7 +662,7 @@ def categorize_document(file_id: str, model: str = "azure__openai__gpt_4o_mini")
             }
         
         # If no answer in response, return default
-        logger.warning(f"No \'answer\' field found in Box AI response for file {file_id}. Response: {response_data}")
+        logger.warning(f"No 'answer' field found in Box AI response for file {file_id}. Response: {response_data}")
         return {
             "document_type": "Other",
             "confidence": 0.0,
@@ -684,9 +687,9 @@ def categorize_document_detailed(file_id: str, model: str, initial_category: str
     """
     # Get access token from client
     access_token = None
-    if hasattr(st.session_state.client, 	\'_oauth\'):
+    if hasattr(st.session_state.client, '_oauth'):
         access_token = st.session_state.client._oauth.access_token
-    elif hasattr(st.session_state.client, \'auth\') and hasattr(st.session_state.client.auth, \'access_token\'):
+    elif hasattr(st.session_state.client, 'auth') and hasattr(st.session_state.client.auth, 'access_token'):
         access_token = st.session_state.client.auth.access_token
     
     if not access_token:
@@ -694,20 +697,20 @@ def categorize_document_detailed(file_id: str, model: str, initial_category: str
     
     # Set headers
     headers = {
-        \'Authorization\': f\'Bearer {access_token}\',
-        \'Content-Type\': \'application/json\'
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
     }
     
     # Get document types (list of dicts) from session state
     document_types_with_desc = st.session_state.document_types
-    document_type_names = [dtype[\'name\'] for dtype in document_types_with_desc]
+    document_type_names = [dtype['name'] for dtype in document_types_with_desc]
     
     # Create a more detailed prompt for second-stage analysis, including descriptions
-    category_options_text = "\n".join([f"- {dtype[\'name\']}: {dtype[\'description\']}" for dtype in document_types_with_desc])
+    category_options_text = "\n".join([f"- {dtype['name']}: {dtype['description']}" for dtype in document_types_with_desc])
 
     prompt = (
         f"Analyze this document in detail to determine its category. "
-        f"The initial categorization suggested it might be \'{initial_category}\', but we need a more thorough analysis.\n\n"
+        f"The initial categorization suggested it might be '{initial_category}', but we need a more thorough analysis.\n\n"
         f"Consider the following categories and their descriptions:\n"
         f"{category_options_text}\n\n"
         f"For each category listed above, provide a score from 0-10 indicating how well the document matches that category, "
@@ -752,7 +755,7 @@ def categorize_document_detailed(file_id: str, model: str, initial_category: str
             error_details = "Unknown error"
             try:
                 error_json = response.json()
-                error_details = error_json.get(\'message\', response.text)
+                error_details = error_json.get('message', response.text)
             except json.JSONDecodeError:
                 error_details = response.text
             raise Exception(f"Error in detailed Box AI API call: {response.status_code}. Details: {error_details}")
@@ -775,7 +778,7 @@ def categorize_document_detailed(file_id: str, model: str, initial_category: str
             }
         
         # If no answer, return default
-        logger.warning(f"No \'answer\' field found in detailed Box AI response for file {file_id}. Response: {response_data}")
+        logger.warning(f"No 'answer' field found in detailed Box AI response for file {file_id}. Response: {response_data}")
         return {
             "document_type": initial_category, # Fallback to initial category
             "confidence": 0.0,
@@ -815,9 +818,9 @@ def parse_categorization_response(response_text: str, valid_categories: List[str
             if extracted_category in valid_categories:
                 document_type = extracted_category
             else:
-                logger.warning(f"Extracted category \'{extracted_category}\' not in valid list: {valid_categories}. Defaulting to \'Other\'.")
+                logger.warning(f"Extracted category '{extracted_category}' not in valid list: {valid_categories}. Defaulting to 'Other'.")
         else:
-            logger.warning(f"Could not find \'Category:\' line in response: {response_text}")
+            logger.warning(f"Could not find 'Category:' line in response: {response_text}")
 
         if confidence_match:
             try:
@@ -827,15 +830,15 @@ def parse_categorization_response(response_text: str, valid_categories: List[str
             except ValueError:
                 logger.warning(f"Could not parse confidence value: {confidence_match.group(1)}. Defaulting to 0.0.")
         else:
-             logger.warning(f"Could not find \'Confidence:\' line in response: {response_text}")
+             logger.warning(f"Could not find 'Confidence:' line in response: {response_text}")
 
         if reasoning_match:
             reasoning = reasoning_match.group(1).strip()
         else:
-            logger.warning(f"Could not find \'Reasoning:\' line in response: {response_text}")
+            logger.warning(f"Could not find 'Reasoning:' line in response: {response_text}")
             # If reasoning not found, use the whole response text after category/confidence if possible
-            lines = response_text.split(\'\n\')
-            reasoning_lines = [line for line in lines if not line.lower().startswith(\'category:\') and not line.lower().startswith(\'confidence:\')]
+            lines = response_text.split('\n')
+            reasoning_lines = [line for line in lines if not line.lower().startswith('category:') and not line.lower().startswith('confidence:')]
             reasoning = "\n".join(reasoning_lines).strip()
             if not reasoning:
                  reasoning = "Reasoning not provided or parsing failed."
@@ -845,7 +848,6 @@ def parse_categorization_response(response_text: str, valid_categories: List[str
         reasoning = f"Error parsing response: {str(e)}"
 
     return document_type, confidence, reasoning
-
 
 def extract_document_features(file_id: str) -> Dict[str, Any]:
     """
@@ -1024,21 +1026,21 @@ def display_confidence_visualization(confidence_data: Dict[str, float]):
     else:
         overall_color = "#dc3545" # Red
         
-    st.markdown(f"**Overall Confidence:** <span style=\'color: {overall_color}; font-weight: bold;\'>{overall:.2f}</span>", unsafe_allow_html=True)
+    st.markdown(f"**Overall Confidence:** <span style='color: {overall_color}; font-weight: bold;'>{overall:.2f}</span>", unsafe_allow_html=True)
     
     # Create data for Altair chart
     data = pd.DataFrame({
-        \'Factor\': [\'AI Confidence\', \'Document Features\', \'Reasoning Quality\'],
-        \'Score\': [ai_factor, feature_factor, reasoning_factor]
+        'Factor': ['AI Confidence', 'Document Features', 'Reasoning Quality'],
+        'Score': [ai_factor, feature_factor, reasoning_factor]
     })
     
     # Create Altair bar chart
     chart = alt.Chart(data).mark_bar().encode(
-        x=alt.X(\'Score\':Q, scale=alt.Scale(domain=[0, 1])), # Set scale domain 0-1
-        y=alt.Y(\'Factor\':N, sort=\'-x\'), # Sort bars by score descending
-        tooltip=[\'Factor\', alt.Tooltip(\'Score\', format=".2f")]
+        x=alt.X("Score:Q", scale=alt.Scale(domain=[0, 1])), # Set scale domain 0-1
+        y=alt.Y("Factor:N", sort="-x"), # Sort bars by score descending
+        tooltip=['Factor', alt.Tooltip('Score', format=".2f")]
     ).properties(
-        title=\'Confidence Factors\'
+        title='Confidence Factors'
     )
     
     st.altair_chart(chart, use_container_width=True)
@@ -1052,7 +1054,7 @@ def get_confidence_explanation(confidence_data: Dict[str, float], category: str)
     feature_factor = confidence_data.get("feature_factor", 0.0)
     reasoning_factor = confidence_data.get("reasoning_factor", 0.0)
     
-    explanation = f"The overall confidence score of {overall:.2f} for category \'{category}\' is based on several factors:"
+    explanation = f"The overall confidence score of {overall:.2f} for category '{category}' is based on several factors:"
     
     # AI Confidence Explanation
     if ai_factor >= 0.8:
@@ -1064,19 +1066,19 @@ def get_confidence_explanation(confidence_data: Dict[str, float], category: str)
         
     # Feature Factor Explanation
     if feature_factor >= 0.7:
-        explanation += f"\n- Document features (like file type, size) strongly align ({feature_factor:.2f}) with typical \'{category}\' documents."
+        explanation += f"\n- Document features (like file type, size) strongly align ({feature_factor:.2f}) with typical '{category}' documents."
     elif feature_factor >= 0.5:
-        explanation += f"\n- Document features moderately align ({feature_factor:.2f}) with \'{category}\' documents."
+        explanation += f"\n- Document features moderately align ({feature_factor:.2f}) with '{category}' documents."
     else:
-        explanation += f"\n- Document features show low alignment ({feature_factor:.2f}) with typical \'{category}\' documents."
+        explanation += f"\n- Document features show low alignment ({feature_factor:.2f}) with typical '{category}' documents."
         
     # Reasoning Quality Explanation
     if reasoning_factor >= 0.7:
-        explanation += f"\n- The AI\'s reasoning was detailed and specific ({reasoning_factor:.2f})."
+        explanation += f"\n- The AI's reasoning was detailed and specific ({reasoning_factor:.2f})."
     elif reasoning_factor >= 0.5:
-        explanation += f"\n- The AI\'s reasoning was moderately detailed ({reasoning_factor:.2f})."
+        explanation += f"\n- The AI's reasoning was moderately detailed ({reasoning_factor:.2f})."
     else:
-        explanation += f"\n- The AI\'s reasoning lacked detail or specificity ({reasoning_factor:.2f})."
+        explanation += f"\n- The AI's reasoning lacked detail or specificity ({reasoning_factor:.2f})."
         
     return {"overall": explanation}
 
@@ -1089,8 +1091,8 @@ def validate_confidence_with_examples():
     # Example inputs
     example_ai_confidence = st.slider("Example AI Confidence", 0.0, 1.0, 0.75, 0.05)
     example_file_ext = st.selectbox("Example File Extension", ["pdf", "docx", "xlsx", "jpg", "txt", ""])
-    example_reasoning = st.text_area("Example AI Reasoning", "The document contains tables, financial figures, and mentions \'Q3 results\'.")
-    example_category = st.selectbox("Example Category", [dtype[\'name\'] for dtype in st.session_state.document_types])
+    example_reasoning = st.text_area("Example AI Reasoning", "The document contains tables, financial figures, and mentions 'Q3 results'.")
+    example_category = st.selectbox("Example Category", [dtype['name'] for dtype in st.session_state.document_types])
     
     # Simulate feature extraction
     example_features = {
@@ -1105,7 +1107,7 @@ def validate_confidence_with_examples():
         example_features,
         example_category,
         example_reasoning,
-        [dtype[\'name\'] for dtype in st.session_state.document_types]
+        [dtype['name'] for dtype in st.session_state.document_types]
     )
     
     # Display results
