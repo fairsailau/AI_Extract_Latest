@@ -23,7 +23,10 @@ from modules.results_viewer import view_results
 from modules.direct_metadata_application_v3_fixed import apply_metadata_direct as apply_metadata
 from modules.document_categorization import document_categorization
 from modules.metadata_template_retrieval import get_metadata_templates, initialize_template_state
-from modules.user_journey_guide import user_journey_guide, display_step_help
+# Remove old user journey guide import
+# from modules.user_journey_guide import user_journey_guide, display_step_help 
+# Import the new horizontal workflow component
+from modules.horizontal_workflow import display_horizontal_workflow
 
 
 # Session timeout configuration
@@ -151,11 +154,11 @@ def initialize_session_state():
     # Initialize template state
     initialize_template_state()
     
-    # UI preferences
+    # UI preferences (Keep for potential future use, but remove journey/help toggles)
     if not hasattr(st.session_state, "ui_preferences"):
         st.session_state.ui_preferences = {
-            "show_user_journey": True,
-            "show_step_help": True,
+            # "show_user_journey": True, # Removed
+            # "show_step_help": True, # Removed
             "dark_mode": False,
             "compact_view": False
         }
@@ -181,73 +184,43 @@ def check_session_timeout():
     
     return False
 
-# Navigation function
+# Navigation function (still used by horizontal workflow callback)
 def navigate_to(page):
     st.session_state.current_page = page
     update_activity()
     logger.info(f"Navigated to page: {page}")
 
-# Sidebar navigation
+# --- Sidebar --- 
+# Keep sidebar for non-workflow items like templates, settings, logout
 with st.sidebar:
     st.title("Box AI Metadata")
     
-    # Show navigation only if authenticated
     if hasattr(st.session_state, "authenticated") and st.session_state.authenticated:
-        # Check for session timeout
+        # Session timeout check
         if check_session_timeout():
             st.warning("Your session has timed out due to inactivity. Please log in again.")
             st.session_state.authenticated = False
             st.session_state.client = None
-            navigate_to("Home")
+            navigate_to("Home") # Use navigate_to to reset page
             st.rerun()
         else:
-            # Update activity timestamp
             update_activity()
         
         # Display session timeout info
         remaining_time = SESSION_TIMEOUT_MINUTES - (datetime.now() - st.session_state.last_activity).total_seconds() / 60
         st.caption(f"Session timeout: {int(remaining_time)} minutes remaining")
         
-        # Display user journey guide
-        if st.session_state.ui_preferences.get("show_user_journey", True):
-            user_journey_guide(st.session_state.current_page)
+        # Remove old sidebar navigation buttons
+        # st.subheader("Navigation")
+        # ... (removed buttons for Home, File Browser, etc.)
         
-        st.subheader("Navigation")
-        
-        if st.button("Home", use_container_width=True, key="nav_home"):
-            navigate_to("Home")
-        
-        if st.button("File Browser", use_container_width=True, key="nav_file_browser"):
-            navigate_to("File Browser")
-        
-        if st.button("Document Categorization", use_container_width=True, key="nav_doc_cat"):
-            navigate_to("Document Categorization")
-            
-        if st.button("Metadata Configuration", use_container_width=True, key="nav_meta_config"):
-            navigate_to("Metadata Configuration")
-            
-        if st.button("Process Files", use_container_width=True, key="nav_process"):
-            navigate_to("Process Files")
-            
-        if st.button("View Results", use_container_width=True, key="nav_view"):
-            navigate_to("View Results")
-            
-        if st.button("Apply Metadata", use_container_width=True, key="nav_apply"):
-            navigate_to("Apply Metadata")
-        
-        # Metadata Templates section
+        # Keep Metadata Templates section
         st.subheader("Metadata Templates")
-        
-        # Display template count
         template_count = len(st.session_state.metadata_templates) if hasattr(st.session_state, "metadata_templates") else 0
         st.write(f"{template_count} templates loaded")
-        
-        # Display last update time
         if hasattr(st.session_state, "template_cache_timestamp") and st.session_state.template_cache_timestamp:
             cache_time = datetime.fromtimestamp(st.session_state.template_cache_timestamp)
-            st.write(f"Last updated: {cache_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        
-        # Refresh templates button
+            st.write(f"Last updated: {cache_time.strftime('%Y-%m-%d %H:%M:%S')}") # Corrected format string quotes
         if st.button("Refresh Templates", key="refresh_templates_btn"):
             with st.spinner("Refreshing metadata templates..."):
                 templates = get_metadata_templates(st.session_state.client, force_refresh=True)
@@ -255,49 +228,46 @@ with st.sidebar:
                 st.success(f"Retrieved {len(templates)} metadata templates")
                 st.rerun()
         
-        # UI Settings
+        # Keep UI Settings (without journey/help toggles)
         with st.expander("UI Settings", expanded=False):
-            st.session_state.ui_preferences["show_user_journey"] = st.checkbox(
-                "Show User Journey Guide", 
-                value=st.session_state.ui_preferences.get("show_user_journey", True),
-                key="show_user_journey_checkbox"
-            )
-            
-            st.session_state.ui_preferences["show_step_help"] = st.checkbox(
-                "Show Step Help", 
-                value=st.session_state.ui_preferences.get("show_step_help", True),
-                key="show_step_help_checkbox"
-            )
-            
+            # Removed checkboxes for show_user_journey and show_step_help
             st.session_state.ui_preferences["compact_view"] = st.checkbox(
                 "Compact View", 
                 value=st.session_state.ui_preferences.get("compact_view", False),
                 key="compact_view_checkbox"
             )
         
-        # Logout button
+        # Keep Logout button
         if st.button("Logout", use_container_width=True, key="nav_logout"):
             st.session_state.authenticated = False
             st.session_state.client = None
-            navigate_to("Home")
+            navigate_to("Home") # Use navigate_to to reset page
             st.rerun()
     
-    # Show app info
+    # Keep About section
     st.subheader("About")
     st.info(
         "This app connects to Box.com and uses Box AI API "
         "to extract metadata from files and apply it at scale."
     )
 
-# Main content area
+# --- Main Content Area --- 
+st.set_page_config(layout="wide") # Use wide layout for better chevron display
+
 if not hasattr(st.session_state, "authenticated") or not st.session_state.authenticated:
-    # Authentication page
+    # Authentication page (no workflow indicator needed here)
+    st.title("Box AI Metadata Extraction - Login")
     authenticate()
 else:
+    # --- Display Horizontal Workflow --- 
+    # Call the new workflow display function at the top
+    display_horizontal_workflow(st.session_state.current_page)
+    st.markdown("--- ") # Add a separator
+    
     # Update activity timestamp
     update_activity()
     
-    # Retrieve metadata templates if authenticated and not already cached
+    # Retrieve metadata templates if needed (no change here)
     if st.session_state.authenticated and st.session_state.client:
         if not st.session_state.metadata_templates:
             with st.spinner("Retrieving metadata templates..."):
@@ -305,95 +275,50 @@ else:
                 st.session_state.template_cache_timestamp = time.time()
                 logger.info(f"Retrieved {len(templates)} metadata templates")
     
-    # Display step help if enabled
-    if st.session_state.ui_preferences.get("show_step_help", True):
-        display_step_help(st.session_state.current_page)
+    # Remove old step help display
+    # if st.session_state.ui_preferences.get("show_step_help", True):
+    #     display_step_help(st.session_state.current_page)
     
-    # Display current page based on navigation
+    # --- Display Current Page Content --- 
+    # Use existing logic to render the content for the current page
     if not hasattr(st.session_state, "current_page") or st.session_state.current_page == "Home":
-        st.title("Box AI Metadata Extraction")
-        
+        # Home page content (after login, maybe show a dashboard or instructions?)
+        # For now, keep the welcome message but remove the old workflow list
+        st.title("Box AI Metadata Extraction - Welcome")
         st.write("""
-        ## Welcome to Box AI Metadata Extraction App
+        Welcome! Use the workflow steps above to navigate the application.
         
-        This application helps you extract metadata from your Box files using Box AI API 
-        and apply it at scale. Follow these steps to get started:
+        Select files, categorize them, configure metadata extraction, process, review, and apply.
         """)
+        # Remove old welcome page workflow list and quick actions
         
-        # Enhanced welcome page with visual workflow
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            st.write("### Workflow Steps")
-            
-            workflow_steps = [
-                {"icon": "📁", "title": "Select Files", "description": "Browse and select files or entire folders from Box"},
-                {"icon": "🏷️", "title": "Categorize Documents", "description": "Use AI to automatically categorize your documents"},
-                {"icon": "⚙️", "title": "Configure Metadata", "description": "Set up metadata extraction parameters"},
-                {"icon": "🔄", "title": "Process Files", "description": "Extract metadata using Box AI"},
-                {"icon": "👁️", "title": "Review Results", "description": "View and edit extracted metadata"},
-                {"icon": "✅", "title": "Apply Metadata", "description": "Apply metadata to your Box files"}
-            ]
-            
-            for i, step in enumerate(workflow_steps):
-                st.markdown(f"""
-                <div style="display: flex; align-items: center; margin-bottom: 15px;">
-                    <div style="font-size: 24px; margin-right: 10px;">{step['icon']}</div>
-                    <div>
-                        <strong>{i+1}. {step['title']}</strong><br>
-                        <span style="font-size: 0.9em;">{step['description']}</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        with col2:
-            st.write("### Key Features")
-            
-            features = [
-                "🔍 AI-powered metadata extraction",
-                "📊 Batch processing for efficiency",
-                "📂 Folder selection support",
-                "🏷️ Document categorization",
-                "📝 Customizable metadata templates",
-                "🔄 Automatic metadata application"
-            ]
-            
-            for feature in features:
-                st.markdown(f"- {feature}")
-        
-        # Quick actions
-        st.subheader("Quick Actions")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if st.button("Browse Files", use_container_width=True, key="quick_browse"):
-                navigate_to("File Browser")
-                st.rerun()
-        
-        with col2:
-            if st.button("Categorize Documents", use_container_width=True, key="quick_categorize"):
-                navigate_to("Document Categorization")
-                st.rerun()
-        
-        with col3:
-            if st.button("Configure Metadata", use_container_width=True, key="quick_configure"):
-                navigate_to("Metadata Configuration")
-                st.rerun()
-    
     elif st.session_state.current_page == "File Browser":
+        st.title("Step 2: File Selection")
         file_browser()
     
     elif st.session_state.current_page == "Document Categorization":
+        st.title("Step 3: Document Categorization")
         document_categorization()
     
     elif st.session_state.current_page == "Metadata Configuration":
+        st.title("Step 4: Metadata Configuration")
         metadata_config()
     
     elif st.session_state.current_page == "Process Files":
+        st.title("Step 5: Process Files")
         process_files()
     
     elif st.session_state.current_page == "View Results":
+        st.title("Step 6: Review Results")
         view_results()
     
     elif st.session_state.current_page == "Apply Metadata":
+        st.title("Step 7: Apply Metadata")
         apply_metadata()
+        
+    else:
+        # Fallback if page is unknown
+        st.error(f"Unknown page: {st.session_state.current_page}")
+        st.button("Go to Login", on_click=navigate_to, args=("Home",))
+
+
