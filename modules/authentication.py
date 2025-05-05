@@ -27,7 +27,7 @@ def check_secrets_available(required_sections):
             section_name = list(section.keys())[0]
             keys = section[section_name]
             if not st.secrets.get(section_name):
-                missing.append(f"Section \'{section_name}\'")
+                missing.append(f"Section '{section_name}'")
             else:
                 for key in keys:
                     # Handle nested keys if necessary (e.g., boxAppSettings.clientID)
@@ -38,7 +38,7 @@ def check_secrets_available(required_sections):
                         if isinstance(current_level, dict) and part in current_level:
                             current_level = current_level[part]
                         else:
-                            missing.append(f"\'{section_name}.{key}\'")
+                            missing.append(f"'{section_name}.{key}'")
                             key_found = False
                             break
                     # if not key_found: continue # Already added to missing
@@ -163,7 +163,7 @@ def oauth2_authentication_secrets():
             webbrowser.open(auth_url)
 
         # Input field for the redirected URL containing the authorization code
-        st.write(f"After authorization, you will be redirected (likely to `{redirect_uri}`). Copy the **full URL** from your browser\'s address bar and paste it below:")
+        st.write(f"After authorization, you will be redirected (likely to `{redirect_uri}`). Copy the **full URL** from your browser's address bar and paste it below:")
         auth_code_url = st.text_input("Paste the full Redirect URL here")
 
         if auth_code_url:
@@ -173,8 +173,8 @@ def oauth2_authentication_secrets():
                 query_params = parse_qs(parsed_url.query)
 
                 if 'code' in query_params:
-                    auth_code = query_params[\'code\'][0]
-                    state = query_params.get(\'state\', [None])[0]
+                    auth_code = query_params['code'][0]
+                    state = query_params.get('state', [None])[0]
 
                     # Verify CSRF token (important security step)
                     if not state or state != st.session_state.get("csrf_token"):
@@ -202,7 +202,7 @@ def oauth2_authentication_secrets():
                         st.success(f"Successfully authenticated as {current_user.name}!")
                         st.rerun() # Rerun to reflect authenticated state
                 else:
-                    st.error("Could not find authorization code (\'...&code=...\') in the pasted URL. Please ensure you paste the full URL after redirection.")
+                    st.error("Could not find authorization code ('...&code=...') in the pasted URL. Please ensure you paste the full URL after redirection.")
             except Exception as e:
                 st.error(f"Error processing authorization code: {str(e)}")
                 logger.exception("Error processing OAuth authorization code:")
@@ -226,7 +226,9 @@ def jwt_authentication_secrets():
     config_dict = st.secrets["box_jwt"]
 
     # Check if the structure looks like a JWT config dictionary
-    if not isinstance(config_dict, dict) or "boxAppSettings" not in config_dict or "enterpriseID" not in config_dict:
+    # Convert secrets object to dict for easier checking
+    config_dict_plain = config_dict.to_dict() if hasattr(config_dict, 'to_dict') else config_dict
+    if not isinstance(config_dict_plain, dict) or "boxAppSettings" not in config_dict_plain or "enterpriseID" not in config_dict_plain:
         st.error("The `[box_jwt]` section in your Streamlit Secrets does not seem to have the correct structure. Please ensure it mirrors the Box `config.json` format.")
         logger.error("box_jwt secret does not have the expected structure.")
         return
@@ -235,8 +237,7 @@ def jwt_authentication_secrets():
         try:
             with st.spinner("Authenticating using JWT..."):
                 # Initialize JWT auth directly from the dictionary obtained from secrets
-                # Ensure the dictionary from secrets is compatible
-                auth = JWTAuth.from_settings_dictionary(config_dict.to_dict()) # Convert secrets object to dict
+                auth = JWTAuth.from_settings_dictionary(config_dict_plain) # Use the plain dict
 
                 # Authenticate (SDK handles token generation)
                 # auth.authenticate_instance() # This might not be needed if client creation triggers it
@@ -255,7 +256,7 @@ def jwt_authentication_secrets():
                 # Store JWT config for potential re-use (optional, secrets are the source)
                 if "auth_credentials" not in st.session_state:
                     st.session_state.auth_credentials = {}
-                st.session_state.auth_credentials["jwt_config"] = config_dict.to_dict()
+                st.session_state.auth_credentials["jwt_config"] = config_dict_plain
 
                 logger.info(f"JWT: Successfully authenticated as {service_account.name} (Service Account)")
                 st.success(f"Successfully authenticated as {service_account.name} (Service Account)!")
@@ -388,3 +389,4 @@ if st.sidebar.checkbox("Debug Authentication"):
         st.sidebar.write([k for k in st.session_state.auth_credentials.keys() if "token" not in k.lower()])
     else:
         st.sidebar.write("**Auth Credentials:** Not available")
+
