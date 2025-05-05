@@ -1,6 +1,7 @@
 # Merged version of direct_metadata_application_v3_fixed.py
 # Incorporates bug fixes (strict type conversion, confidence filtering assurance)
-# while preserving the original structure and UI elements.
+# Restores per-file template mapping logic based on document categorization.
+# Preserves the original structure and UI elements.
 
 import streamlit as st
 import logging
@@ -36,19 +37,21 @@ def get_template_schema(client, scope_str, template_key):
     Returns:
         dict: A dictionary mapping field keys to their types, or None if error.
     """
-    # --- This function is identical in both versions, keep as is --- 
     cache_key = f'{scope_str}_{template_key}'
     if cache_key in st.session_state.template_schema_cache:
         logger.info(f"Using cached schema for {scope_str}/{template_key}")
         return st.session_state.template_schema_cache[cache_key]
 
     try:
+        # Determine the correct scope string ('enterprise' or 'global') for SDK v3
+        # The scope_str passed in should already be just 'enterprise' or 'global' based on parsing
         if scope_str.startswith('enterprise'):
             scope_param = 'enterprise'
         elif scope_str == 'global':
             scope_param = 'global'
         else:
-            logger.error(f"Unknown scope format: {scope_str}. Cannot determine scope parameter for SDK v3.")
+            # If the parsing failed earlier, this might catch it, but parsing should handle it.
+            logger.error(f"Invalid scope format passed to get_template_schema: {scope_str}. Expected 'enterprise' or 'global'.")
             st.session_state.template_schema_cache[cache_key] = None
             return None
 
@@ -66,7 +69,8 @@ def get_template_schema(client, scope_str, template_key):
             return {}
             
     except exception.BoxAPIException as e:
-        logger.error(f"Box API Error fetching template schema for {scope_str}/{template_key}: {e}")
+        # Log specific Box API errors
+        logger.error(f"Box API Error fetching template schema for {scope_str}/{template_key}: Status={e.status}, Code={e.code}, Message={e.message}")
         st.session_state.template_schema_cache[cache_key] = None 
         return None
     except Exception as e:
@@ -78,16 +82,6 @@ def convert_value_for_template(key, value, field_type):
     """
     Converts a metadata value to the type specified by the template field.
     Raises ConversionError if conversion fails. (Modified from original to be strict)
-
-    Args:
-        key (str): The metadata field key.
-        value: The original value.
-        field_type (str): The target field type ('string', 'float', 'date', 'enum', 'multiSelect').
-
-    Returns:
-        Converted value.
-    Raises:
-        ConversionError: If the value cannot be converted to the target type.
     """
     # --- Use the strict version from the fix --- 
     if value is None:
@@ -194,16 +188,140 @@ def filter_confidence_fields(metadata_values):
     # --- This function is identical in both versions, keep as is --- 
     return {key: value for key, value in metadata_values.items() if not key.endswith("_confidence")} 
 
+def parse_template_id(template_id_full):
+    """ Parses 'scope_templateKey' into (scope, templateKey). """
+    if not template_id_full or '_' not in template_id_full:
+        raise ValueError(f"Invalid template ID format: {template_id_full}")
+    scope_parts = template_id_full.split('_')
+    if len(scope_parts) < 2:
+         raise ValueError(f"Template ID format incorrect, expected scope_templateKey: {template_id_full}")
+    scope_str = scope_parts[0] # 'enterprise' or 'global'
+    template_key = '_'.join(scope_parts[1:])
+    # Validate scope format for API call
+    if not scope_str.startswith('enterprise') and scope_str != 'global':
+         raise ValueError(f"Invalid scope in template ID: {scope_str}")
+    # Return the scope string needed for API calls ('enterprise' or 'global')
+    api_scope = 'enterprise' if scope_str.startswith('enterprise') else 'global'
+    return api_scope, template_key
+
+def apply_metadata_to_file_direct(client, file_id, file_name, metadata_values, scope_str, template_key):
+    """
+    Applies metadata to a single file, handling type conversion and errors.
+    (Internal function called by apply_metadata_direct)
+    """
+    logger.info(f"Starting metadata application for file ID {file_id} ({file_name}) with template {scope_str}/{template_key}")
+    
+    try:
+        # 1. Pre-process metadata: Flatten (if needed) and filter confidence fields
+        # flattened_values = flatten_metadata_for_template(metadata_values) # Apply if structure requires it
+        filtered_metadata = filter_confidence_fields(metadata_values)
+        logger.debug(f"File ID {file_id}: Filtered metadata (no confidence): {filtered_metadata}")
+
+        # 2. Get template schema (using the specific scope/key for this file)
+        template_schema = get_template_schema(client, scope_str, template_key)
+        if template_schema is None:
+            # Error already logged by get_template_schema
+            error_msg = f"Could not retrieve template schema for {scope_str}/{template_key}. Cannot apply metadata to file {file_id} ({file_name})."
+            st.error(f"Schema retrieval failed for {template_key}. Cannot apply metadata to {file_name}.")
+            return False, error_msg
+        if not template_schema: # Empty schema
+             logger.warning(f"Template schema for {scope_str}/{template_key} is empty. No fields to apply for file {file_id} ({file_name}).")
+             return True, "Template schema is empty, nothing to apply."
+
+        # 3. Prepare metadata payload based on schema
+        metadata_to_apply = {}
+        conversion_errors = []
+        
+        for key, field_type in template_schema.items():
+            if key in filtered_metadata:
+                value = filtered_metadata[key]
+                try:
+                    converted_value = convert_value_for_template(key, value, field_type)
+                    if converted_value is not None:
+                        metadata_to_apply[key] = converted_value
+                    else:
+                        logger.info(f"Value for key '{key}' is None. Skipping for file {file_id}.")
+                except ConversionError as e:
+                    error_msg = f"Conversion error for key '{key}' (expected type '{field_type}', value: {repr(value)}): {e}. Field skipped."
+                    logger.warning(error_msg)
+                    conversion_errors.append(error_msg)
+                except Exception as e:
+                    error_msg = f"Unexpected error processing key '{key}' for file {file_id}: {e}. Field skipped."
+                    logger.error(error_msg)
+                    conversion_errors.append(error_msg)
+            else:
+                logger.info(f"Template field '{key}' not found in extracted metadata for file {file_id}. Skipping field.")
+
+        # 4. Check if there's anything to apply
+        if not metadata_to_apply:
+            if conversion_errors:
+                warn_msg = f"Metadata application skipped for file {file_name}: No fields could be successfully converted. Errors: {'; '.join(conversion_errors)}"
+                st.warning(warn_msg)
+                logger.warning(warn_msg)
+                return False, f"No valid metadata fields to apply after conversion errors: {'; '.join(conversion_errors)}"
+            else:
+                info_msg = f"No matching metadata fields found or all values were None for file {file_name}. Nothing to apply."
+                st.info(info_msg)
+                logger.info(info_msg)
+                return True, "No matching fields to apply"
+
+        # 5. Apply metadata via Box API
+        logger.info(f"Attempting to apply metadata to file {file_id}: {metadata_to_apply}")
+        try:
+            # Use the correct scope_str ('enterprise' or 'global') for the API call
+            updated_metadata = client.file(file_id).metadata(scope=scope_str, template=template_key).update(metadata_to_apply)
+            success_msg = f"Metadata updated successfully for {file_name}."
+            logger.info(success_msg)
+            if conversion_errors:
+                 st.success(f"{success_msg} Warnings during conversion: {'; '.join(conversion_errors)}")
+                 return True, f"{success_msg} Conversion warnings: {'; '.join(conversion_errors)}"
+            else:
+                 st.success(success_msg)
+                 return True, success_msg
+                 
+        except exception.BoxAPIException as e:
+            if e.status == 404: # Metadata instance doesn't exist, so create it
+                logger.info(f"Metadata instance not found for file {file_id}, template {template_key}. Creating new instance.")
+                try:
+                    created_metadata = client.file(file_id).metadata(scope=scope_str, template=template_key).create(metadata_to_apply)
+                    success_msg = f"Metadata created successfully for {file_name}."
+                    logger.info(success_msg)
+                    if conversion_errors:
+                         st.success(f"{success_msg} Warnings during conversion: {'; '.join(conversion_errors)}")
+                         return True, f"{success_msg} Conversion warnings: {'; '.join(conversion_errors)}"
+                    else:
+                         st.success(success_msg)
+                         return True, success_msg
+                         
+                except exception.BoxAPIException as create_e:
+                    error_msg = f"Box API Error creating metadata for {file_name}: Status={create_e.status}, Code={create_e.code}, Message={create_e.message}"
+                    logger.error(error_msg)
+                    st.error(error_msg)
+                    return False, f"{error_msg}. Conversion warnings: {'; '.join(conversion_errors)}" if conversion_errors else error_msg
+            else: # Other API error during update
+                error_msg = f"Box API Error updating metadata for {file_name}: Status={e.status}, Code={e.code}, Message={e.message}"
+                logger.error(error_msg)
+                st.error(error_msg)
+                return False, f"{error_msg}. Conversion warnings: {'; '.join(conversion_errors)}" if conversion_errors else error_msg
+                
+    except Exception as e:
+        # Catch-all for unexpected errors during the process for this file
+        error_msg = f"Unexpected error applying metadata to file {file_id} ({file_name}): {e}"
+        logger.exception(error_msg) # Log full traceback
+        st.error(error_msg)
+        return False, error_msg
+
 def apply_metadata_direct():
     """
-    Direct approach to apply metadata to Box files with type conversion based on template schema.
-    (Merged version: Uses original structure with fixes integrated)
+    Main Streamlit page function to apply metadata using the direct approach.
+    Restored logic to use per-file template mapping based on categorization.
     """
     st.title("Apply Metadata")
     
     # --- Keep original debug checkbox and client checks --- 
     debug_mode = st.sidebar.checkbox("Debug Session State", key="debug_checkbox")
     if debug_mode:
+        # ... (debug code remains the same)
         st.sidebar.write("### Session State Debug")
         st.sidebar.write("**Session State Keys:**")
         st.sidebar.write(list(st.session_state.keys()))
@@ -220,10 +338,24 @@ def apply_metadata_direct():
             st.sidebar.write("**Processing State Keys:**")
             st.sidebar.write(list(st.session_state.processing_state.keys()))
             if st.session_state.processing_state.get("results"):
-                 first_key = next(iter(st.session_state.processing_state["results"]))
-                 st.sidebar.write(f"**First Processing Result ({first_key}):**")
-                 st.sidebar.json(st.session_state.processing_state["results"][first_key])
-    
+                 try:
+                     first_key = next(iter(st.session_state.processing_state["results"]))
+                     st.sidebar.write(f"**First Processing Result ({first_key}):**")
+                     st.sidebar.json(st.session_state.processing_state["results"][first_key])
+                 except StopIteration:
+                     st.sidebar.write("Processing results dictionary is empty.")
+            else:
+                 st.sidebar.write("No 'results' key in processing_state.")
+        if "document_categorization" in st.session_state:
+             st.sidebar.write("**Document Categorization:**")
+             st.sidebar.json(st.session_state.document_categorization)
+        if "document_type_to_template" in st.session_state:
+             st.sidebar.write("**Document Type to Template Mapping:**")
+             st.sidebar.json(st.session_state.document_type_to_template)
+        if "metadata_config" in st.session_state:
+             st.sidebar.write("**Metadata Config:**")
+             st.sidebar.json(st.session_state.metadata_config)
+             
     if 'client' not in st.session_state:
         st.error("Box client not found. Please authenticate first.")
         if st.button("Go to Authentication", key="go_to_auth_btn"):
@@ -253,34 +385,48 @@ def apply_metadata_direct():
     
     processing_state = st.session_state.processing_state
     logger.info(f"Processing state keys: {list(processing_state.keys())}")
-    st.sidebar.write("🔍 RAW processing_state")
-    st.sidebar.json(processing_state)
+    # st.sidebar.write("🔍 RAW processing_state") # Keep original sidebar dump if needed
+    # st.sidebar.json(processing_state)
     
     results_map = processing_state.get("results", {})
     file_id_to_file_name = {str(f["id"]): f["name"] for f in st.session_state.get("selected_files", []) if isinstance(f, dict) and "id" in f}
     
-    # --- Keep original template selection logic, but use improved parsing from fix --- 
-    if "metadata_config" not in st.session_state or not st.session_state.metadata_config.get("use_template"):
+    # --- Determine Default Template (used if no mapping found) --- 
+    default_template_id_full = None
+    default_scope_str = None
+    default_template_key = None
+    has_default_template = False
+    
+    if "metadata_config" in st.session_state and st.session_state.metadata_config.get("use_template"):
+        default_template_id_full = st.session_state.metadata_config.get("template_id")
+        if default_template_id_full:
+            try:
+                default_scope_str, default_template_key = parse_template_id(default_template_id_full)
+                has_default_template = True
+                logger.info(f"Default template configured: Scope='{default_scope_str}', Key='{default_template_key}'")
+            except ValueError as e:
+                st.error(f"Invalid default template ID format in configuration ('{default_template_id_full}'): {e}")
+                # Cannot proceed without a valid default if mappings fail
+                return 
+        else:
+             logger.warning("Structured extraction selected, but no default template ID found in metadata_config.")
+             # Decide if this is an error or if we should skip files without mappings
+             # For now, let's allow proceeding but warn.
+             st.warning("Structured extraction selected, but no default template configured. Files without specific mappings will be skipped.")
+    else:
         st.warning("Structured extraction with a template was not selected or configured. Cannot apply metadata using a template.")
         return
-        
-    template_id_full = st.session_state.metadata_config.get("template_id")
-    if not template_id_full or '_' not in template_id_full:
-        st.error(f"Invalid or missing template ID in configuration: {template_id_full}. Cannot apply metadata.")
-        return
-        
-    try:
-        # Use improved parsing from fix
-        scope_parts = template_id_full.split('_')
-        if len(scope_parts) < 2:
-             raise ValueError("Template ID format incorrect, expected scope_templateKey")
-        scope_str = scope_parts[0] # 'enterprise' or 'global'
-        template_key = '_'.join(scope_parts[1:])
-        logger.info(f"Applying metadata using template: Scope='{scope_str}', Key='{template_key}'")
-        st.write(f"Applying metadata using template: **{template_key}** (Scope: {scope_str})")
-    except Exception as e:
-        st.error(f"Could not parse template scope and key from configuration ('{template_id_full}'): {e}")
-        return
+
+    # --- Get Categorization and Mapping Info --- 
+    categorization_results = st.session_state.get("document_categorization", {}).get("results", {})
+    doc_type_to_template_map = st.session_state.get("document_type_to_template", {})
+    has_categorization_info = bool(categorization_results)
+    has_mapping_info = bool(doc_type_to_template_map)
+
+    if has_categorization_info:
+        logger.info(f"Found categorization results for {len(categorization_results)} files.")
+    if has_mapping_info:
+        logger.info(f"Found document type to template mappings: {doc_type_to_template_map}")
 
     st.write(f"Found {len(results_map)} files with extraction results to process.")
 
@@ -290,17 +436,9 @@ def apply_metadata_direct():
         status_text = st.empty()
         success_count = 0
         error_count = 0
+        skipped_count = 0 # Count files skipped due to no template
         total_files = len(results_map)
         conversion_warnings = {} # Store warnings per file
-
-        # Get template schema once before the loop
-        template_schema = get_template_schema(client, scope_str, template_key)
-        if template_schema is None:
-            st.error(f"Could not retrieve template schema for {scope_str}/{template_key}. Aborting metadata application.")
-            return
-        if not template_schema:
-            st.warning(f"Template schema for {scope_str}/{template_key} is empty. No fields to apply.")
-            # Allow proceeding, but nothing will be applied
 
         for i, (file_id, metadata_values) in enumerate(results_map.items()):
             file_name = file_id_to_file_name.get(file_id, f"File ID {file_id}")
@@ -312,120 +450,99 @@ def apply_metadata_direct():
                  error_count += 1
                  continue
                  
-            # --- Integrate Fixes Here --- 
-            metadata_to_apply = {}
-            current_file_conversion_errors = []
+            # --- Determine Template for THIS file --- 
+            file_scope_str = None
+            file_template_key = None
+            template_source = "Default"
             
-            # 1. Filter confidence fields (as in original, but ensure it happens)
-            filtered_metadata = filter_confidence_fields(metadata_values)
-            logger.debug(f"File ID {file_id}: Filtered metadata (no confidence): {filtered_metadata}")
-
-            # 2. Iterate through TEMPLATE schema fields and convert
-            if template_schema: # Only proceed if schema is not empty
-                for key, field_type in template_schema.items():
-                    if key in filtered_metadata:
-                        value = filtered_metadata[key]
+            # 1. Check categorization results for this file_id
+            if has_categorization_info and file_id in categorization_results:
+                doc_type = categorization_results[file_id].get("document_type")
+                if doc_type and has_mapping_info and doc_type in doc_type_to_template_map:
+                    mapped_template_id = doc_type_to_template_map[doc_type]
+                    if mapped_template_id:
                         try:
-                            # Use the strict conversion function
-                            converted_value = convert_value_for_template(key, value, field_type)
-                            if converted_value is not None:
-                                metadata_to_apply[key] = converted_value
-                            else:
-                                logger.info(f"Value for key '{key}' is None. Skipping for file {file_id}.")
-                        except ConversionError as e:
-                            # Catch specific conversion errors (from fix)
-                            error_msg = f"Conversion error for key '{key}' (expected type '{field_type}', value: {repr(value)}): {e}. Field skipped."
-                            logger.warning(error_msg)
-                            current_file_conversion_errors.append(error_msg)
-                        except Exception as e:
-                            error_msg = f"Unexpected error processing key '{key}' for file {file_id}: {e}. Field skipped."
-                            logger.error(error_msg)
-                            current_file_conversion_errors.append(error_msg)
+                            file_scope_str, file_template_key = parse_template_id(mapped_template_id)
+                            template_source = f"Mapping for '{doc_type}'"
+                            logger.info(f"Using mapped template for file {file_id} ({doc_type}): {file_scope_str}/{file_template_key}")
+                        except ValueError as e:
+                            logger.warning(f"Invalid template ID '{mapped_template_id}' mapped for doc type '{doc_type}'. Falling back to default. Error: {e}")
                     else:
-                        logger.info(f"Template field '{key}' not found in extracted metadata for file {file_id}. Skipping field.")
-            
-            # Store conversion warnings for this file
-            if current_file_conversion_errors:
-                conversion_warnings[file_id] = current_file_conversion_errors
-
-            # 3. Apply metadata if payload is not empty
-            if not metadata_to_apply:
-                if current_file_conversion_errors:
-                    warn_msg = f"Metadata application skipped for file {file_name}: No fields could be successfully converted. Errors: {'; '.join(current_file_conversion_errors)}"
-                    st.warning(warn_msg)
-                    logger.warning(warn_msg)
-                    error_count += 1 # Count as error if nothing could be applied due to conversion issues
+                        logger.info(f"No template mapped for doc type '{doc_type}'. Falling back to default.")
                 else:
-                    info_msg = f"No matching metadata fields found or all values were None for file {file_name}. Nothing to apply."
-                    st.info(info_msg)
-                    logger.info(info_msg)
-                    # Don't count as success or error if simply no matching fields
+                     logger.info(f"No document type found or no mapping exists for file {file_id}. Falling back to default.")
             else:
-                logger.info(f"Attempting to apply metadata to file {file_id}: {metadata_to_apply}")
-                try:
-                    # Try update first, then create (original logic)
-                    updated_metadata = client.file(file_id).metadata(scope=scope_str, template=template_key).update(metadata_to_apply)
-                    success_msg = f"Metadata updated successfully for {file_name}."
-                    logger.info(success_msg)
-                    if file_id in conversion_warnings:
-                         st.success(f"{success_msg} (with conversion warnings)")
-                    else:
-                         st.success(success_msg)
-                    success_count += 1
-                         
-                except exception.BoxAPIException as e:
-                    if e.status == 404:
-                        logger.info(f"Metadata instance not found for file {file_id}, template {template_key}. Creating new instance.")
-                        try:
-                            created_metadata = client.file(file_id).metadata(scope=scope_str, template=template_key).create(metadata_to_apply)
-                            success_msg = f"Metadata created successfully for {file_name}."
-                            logger.info(success_msg)
-                            if file_id in conversion_warnings:
-                                 st.success(f"{success_msg} (with conversion warnings)")
-                            else:
-                                 st.success(success_msg)
-                            success_count += 1
-                                 
-                        except exception.BoxAPIException as create_e:
-                            error_msg = f"Box API Error creating metadata for {file_name}: {create_e}"
-                            logger.error(error_msg)
-                            st.error(error_msg)
-                            error_count += 1
-                    else:
-                        error_msg = f"Box API Error updating metadata for {file_name}: {e}"
-                        logger.error(error_msg)
-                        st.error(error_msg)
-                        error_count += 1
-                except Exception as e:
-                    error_msg = f"Unexpected error applying metadata to file {file_id} ({file_name}): {e}"
-                    logger.exception(error_msg)
-                    st.error(error_msg)
-                    error_count += 1
+                 logger.info(f"No categorization result found for file {file_id}. Falling back to default.")
+
+            # 2. Fallback to default if no specific template was found/valid
+            if not file_template_key:
+                if has_default_template:
+                    file_scope_str = default_scope_str
+                    file_template_key = default_template_key
+                    template_source = "Default"
+                    logger.info(f"Using default template for file {file_id}: {file_scope_str}/{file_template_key}")
+                else:
+                    # No specific mapping AND no valid default template
+                    logger.warning(f"No specific template mapping and no valid default template configured. Skipping metadata application for file {file_id} ({file_name}).")
+                    st.warning(f"Skipping {file_name}: No applicable metadata template found.")
+                    skipped_count += 1
+                    progress_bar.progress((i + 1) / total_files) # Update progress even if skipped
+                    continue # Skip to the next file
+            
+            # Display which template is being used
+            status_text.text(f"Applying metadata to {file_name} using template '{file_template_key}' ({template_source})... ({i+1}/{total_files})")
+
+            # --- Call internal function with the determined scope/key --- 
+            success, message = apply_metadata_to_file_direct(
+                client,
+                file_id,
+                file_name,
+                metadata_values, 
+                file_scope_str, # Pass the specific scope for this file
+                file_template_key # Pass the specific key for this file
+            )
+            
+            if success:
+                success_count += 1
+                # Store conversion warnings if message contains them (crude check)
+                if "Conversion warnings:" in message:
+                    conversion_warnings[file_id] = message.split("Conversion warnings:")[1].strip()
+            else:
+                error_count += 1
+                # Error already logged/shown by apply_metadata_to_file_direct
             
             # Update progress bar (original logic)
             progress_bar.progress((i + 1) / total_files)
 
-        # Final status update (original logic, slightly enhanced for warnings)
+        # Final status update (original logic, slightly enhanced for warnings/skipped)
         status_text.text("Metadata application process complete.")
         st.write("---")
         st.write(f"**Summary:**")
         st.write(f"- Successfully applied/updated metadata for {success_count} files.")
         if conversion_warnings:
-             st.write(f"- Conversion warnings occurred for {len(conversion_warnings)} files (some fields may have been skipped). Check logs for details.")
+             st.write(f"- Conversion warnings occurred for {len(conversion_warnings)} files (some fields may have been skipped). Check logs or messages above for details.")
+        if skipped_count > 0:
+             st.write(f"- Skipped applying metadata for {skipped_count} files due to no applicable template.")
         if error_count > 0:
             st.write(f"- Failed to apply metadata or encountered errors for {error_count} files (see errors/warnings above)." )
-        else:
+        elif skipped_count == 0:
              st.write(f"- No application errors encountered.")
 
     # --- Keep original debug payload display --- 
     if st.sidebar.checkbox("Show Processed Metadata Payload (Debug)", key="debug_payload_checkbox"):
+        # ... (debug code remains the same)
         st.sidebar.write("### Processed Metadata (Example First File)")
         if results_map:
-            first_file_id = next(iter(results_map))
-            first_metadata = results_map[first_file_id]
-            if isinstance(first_metadata, dict):
-                 filtered = filter_confidence_fields(first_metadata)
-                 st.sidebar.json(filtered)
-            else:
-                 st.sidebar.write("Invalid metadata format for first file.")
+            try:
+                first_file_id = next(iter(results_map))
+                first_metadata = results_map[first_file_id]
+                if isinstance(first_metadata, dict):
+                     filtered = filter_confidence_fields(first_metadata)
+                     st.sidebar.json(filtered)
+                else:
+                     st.sidebar.write("Invalid metadata format for first file.")
+            except StopIteration:
+                 st.sidebar.write("Results map is empty.")
+        else:
+             st.sidebar.write("No results map found.")
 
