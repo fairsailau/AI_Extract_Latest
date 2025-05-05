@@ -172,7 +172,7 @@ def oauth2_authentication_secrets():
                 parsed_url = urlparse(auth_code_url)
                 query_params = parse_qs(parsed_url.query)
 
-                if \'code\' in query_params:
+                if 'code' in query_params:
                     auth_code = query_params[\'code\'][0]
                     state = query_params.get(\'state\', [None])[0]
 
