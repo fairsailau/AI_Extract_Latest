@@ -188,13 +188,24 @@ def document_categorization():
             # Select models for consensus
             consensus_models = []
             if use_consensus:
-                consensus_models = st.multiselect(
+                # Use the filtered descriptions for the multiselect options
+                selected_consensus_descs = st.multiselect(
                     "Select models for consensus",
-                    options=ai_models,
-                    default=[ai_models[0], ai_models[2]] if len(ai_models) > 2 else ai_models[:1],
-                    help="Select 2-3 models for best results (more models will increase processing time)"
+                    options=ai_model_options, # Use descriptions for display
+                    # Default to first 2 descriptions if available
+                    default=[ai_model_options[0], ai_model_options[1]] if len(ai_model_options) > 1 else ai_model_options[:1],
+                    help="Select 2-3 models for best results (more models will increase processing time)",
+                    key="consensus_models_multiselect" # Added a key for stability
                 )
-                
+
+                # Map selected descriptions back to model names (keys)
+                consensus_models = []
+                for desc in selected_consensus_descs:
+                    for name, description in ai_models_with_desc.items():
+                        if description == desc:
+                            consensus_models.append(name)
+                            break
+
                 if len(consensus_models) < 1:
                     st.warning("Please select at least one model for consensus categorization")
         
