@@ -35,7 +35,9 @@ def check_secrets_available(required_sections):
                     current_level = st.secrets.get(section_name)
                     key_found = True
                     for part in parts:
-                        if isinstance(current_level, dict) and part in current_level:
+                        # Check if current_level is a dict-like object (SecretsProxy or dict)
+                        is_dict_like = hasattr(current_level, '__getitem__') and hasattr(current_level, 'get')
+                        if is_dict_like and current_level.get(part) is not None:
                             current_level = current_level[part]
                         else:
                             missing.append(f"'{section_name}.{key}'")
@@ -77,7 +79,7 @@ def authenticate():
     auth_method = st.radio(
         "Select authentication method (must match your Streamlit Secrets configuration):",
         options=["OAuth 2.0", "JWT", "Developer Token (Testing Only)"],
-        index=0,
+        index=2, # Default to Developer Token for easier testing if that's the focus
         key="auth_method_secrets_radio",
         help="Choose the method corresponding to the secrets you have configured."
     )
@@ -273,14 +275,20 @@ def developer_token_authentication_secrets():
     st.subheader("Developer Token Authentication (using Streamlit Secrets)")
     st.warning("Developer tokens expire after 60 minutes and are for testing only.")
 
+    # --- Add this line for debugging ---
+    st.write("DEBUG: Checking st.secrets.box_dev:", st.secrets.get("box_dev")) 
+    # ----------------------------------
+
     # Check if secrets are available
     secrets_ok, _ = check_secrets_available([{"box_dev": ["client_id", "client_secret", "developer_token"]}])
     if not secrets_ok:
         return
 
-    client_id = st.secrets["box_dev"]["client_id"]
-    client_secret = st.secrets["box_dev"]["client_secret"]
-    developer_token = st.secrets["box_dev"]["developer_token"]
+    # Access secrets only if check passes
+    box_dev_secrets = st.secrets["box_dev"]
+    client_id = box_dev_secrets["client_id"]
+    client_secret = box_dev_secrets["client_secret"]
+    developer_token = box_dev_secrets["developer_token"]
 
     if st.button("Authenticate using Developer Token Secret"):
         try:
@@ -346,47 +354,18 @@ def store_tokens(access_token, refresh_token=None):
         elif st.secrets.get("box_dev"):
              st.session_state.auth_credentials["client_id"] = st.secrets["box_dev"]["client_id"]
              st.session_state.auth_credentials["client_secret"] = st.secrets["box_dev"]["client_secret"]
-             logger.info("Captured client_id/secret from dev secrets for token refresh storage.")
-        else:
-             logger.warning("Could not find client_id/secret in secrets for token refresh storage.")
+             logger.info("Captured client_id/secret from dev token secrets for token refresh storage.")
+
     except Exception as e:
-        logger.error(f"Error accessing secrets while storing tokens: {e}")
+        logger.warning(f"Could not store client_id/secret for potential token refresh: {e}")
 
-    # Store the actual tokens
-    st.session_state.auth_credentials["access_token"] = access_token
-    if refresh_token:
-        st.session_state.auth_credentials["refresh_token"] = refresh_token
-
-    logger.info(f"Auth credentials keys stored for refresh: {list(st.session_state.auth_credentials.keys())}")
-
-    # Must return tokens for Box SDK internal use
-    return access_token, refresh_token
-
-# Remove the old authentication functions that used UI input
-# del oauth2_authentication
-# del jwt_authentication
-# del developer_token_authentication
-
-# Remove debug functionality related to old UI inputs if desired, or keep for general state inspection
-# (Keeping it for now as it shows general session state)
-if st.sidebar.checkbox("Debug Authentication"):
-    st.sidebar.write("### Authentication Debug")
-
-    st.sidebar.write("**Session State Keys:**")
-    st.sidebar.write(list(st.session_state.keys()))
-
-    if "authenticated" in st.session_state:
-        st.sidebar.write(f"**Authenticated:** {st.session_state.authenticated}")
-
-    if "client" in st.session_state:
-        st.sidebar.write("**Client:** Available")
-    else:
-        st.sidebar.write("**Client:** Not available")
-
-    if "auth_credentials" in st.session_state:
-        st.sidebar.write("**Auth Credentials Keys (for refresh):**")
-        # Avoid printing sensitive values like tokens
-        st.sidebar.write([k for k in st.session_state.auth_credentials.keys() if "token" not in k.lower()])
-    else:
-        st.sidebar.write("**Auth Credentials:** Not available")
+# --- Main Authentication Logic ---
+# This part is usually called from your main app.py
+# Example call:
+# import authentication
+# if not st.session_state.get("authenticated"):
+#     authentication.authenticate()
+# else:
+#     # Your main app logic here
+#     st.write("App content...")
 
