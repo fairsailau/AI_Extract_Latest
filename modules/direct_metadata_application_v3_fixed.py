@@ -1,6 +1,7 @@
 # Merged version of direct_metadata_application_v3_fixed.py
 # Incorporates bug fixes (strict type conversion, confidence filtering assurance)
 # Restores per-file template mapping logic based on document categorization.
+# Corrects template ID parsing for scope and key.
 # Preserves the original structure and UI elements.
 
 import streamlit as st
@@ -23,58 +24,47 @@ if 'template_schema_cache' not in st.session_state:
 class ConversionError(ValueError):
     pass
 
-def get_template_schema(client, scope_str, template_key):
+def get_template_schema(client, api_scope, template_key):
     """
     Fetches the metadata template schema from Box API (compatible with SDK v3.x).
     Uses a cache to avoid redundant API calls.
-    Handles scope parameter as string ('enterprise' or 'global').
     
     Args:
         client: Box client object
-        scope_str (str): The scope of the template (e.g., 'enterprise_12345' or 'global')
-        template_key (str): The key of the template (e.g., 'invoiceData')
+        api_scope (str): The scope for the API call ("enterprise" or "global").
+        template_key (str): The key of the template (e.g., "homeLoan").
         
     Returns:
         dict: A dictionary mapping field keys to their types, or None if error.
     """
-    cache_key = f'{scope_str}_{template_key}'
+    # Use api_scope and template_key directly for caching and logging
+    cache_key = f'{api_scope}_{template_key}' 
     if cache_key in st.session_state.template_schema_cache:
-        logger.info(f"Using cached schema for {scope_str}/{template_key}")
+        logger.info(f"Using cached schema for {api_scope}/{template_key}")
         return st.session_state.template_schema_cache[cache_key]
 
     try:
-        # Determine the correct scope string ('enterprise' or 'global') for SDK v3
-        # The scope_str passed in should already be just 'enterprise' or 'global' based on parsing
-        if scope_str.startswith('enterprise'):
-            scope_param = 'enterprise'
-        elif scope_str == 'global':
-            scope_param = 'global'
-        else:
-            # If the parsing failed earlier, this might catch it, but parsing should handle it.
-            logger.error(f"Invalid scope format passed to get_template_schema: {scope_str}. Expected 'enterprise' or 'global'.")
-            st.session_state.template_schema_cache[cache_key] = None
-            return None
-
-        logger.info(f"Fetching template schema for {scope_str}/{template_key} using scope parameter '{scope_param}'")
-        template = client.metadata_template(scope_param, template_key).get()
+        # Use the already determined api_scope ("enterprise" or "global") for the SDK call
+        logger.info(f"Fetching template schema for {api_scope}/{template_key} using scope parameter '{api_scope}'")
+        template = client.metadata_template(api_scope, template_key).get()
         
         if template and hasattr(template, 'fields') and template.fields:
             schema_map = {field['key']: field['type'] for field in template.fields}
             st.session_state.template_schema_cache[cache_key] = schema_map
-            logger.info(f"Successfully fetched and cached schema for {scope_str}/{template_key}")
+            logger.info(f"Successfully fetched and cached schema for {api_scope}/{template_key}")
             return schema_map
         else:
-            logger.warning(f"Template {scope_str}/{template_key} found but has no fields or is invalid.")
+            logger.warning(f"Template {api_scope}/{template_key} found but has no fields or is invalid.")
             st.session_state.template_schema_cache[cache_key] = {}
             return {}
             
     except exception.BoxAPIException as e:
         # Log specific Box API errors
-        logger.error(f"Box API Error fetching template schema for {scope_str}/{template_key}: Status={e.status}, Code={e.code}, Message={e.message}")
+        logger.error(f"Box API Error fetching template schema for {api_scope}/{template_key}: Status={e.status}, Code={e.code}, Message={e.message}")
         st.session_state.template_schema_cache[cache_key] = None 
         return None
     except Exception as e:
-        logger.exception(f"Unexpected error fetching template schema for {scope_str}/{template_key}: {e}")
+        logger.exception(f"Unexpected error fetching template schema for {api_scope}/{template_key}: {e}")
         st.session_state.template_schema_cache[cache_key] = None
         return None
 
@@ -189,43 +179,80 @@ def filter_confidence_fields(metadata_values):
     return {key: value for key, value in metadata_values.items() if not key.endswith("_confidence")} 
 
 def parse_template_id(template_id_full):
-    """ Parses 'scope_templateKey' into (scope, templateKey). """
+    """ 
+    Parses 'scope_templateKey' (e.g., 'enterprise_12345_myTemplate') into 
+    (api_scope, template_key, full_scope).
+    
+    Args:
+        template_id_full (str): The combined template ID string.
+        
+    Returns:
+        tuple: (api_scope, template_key, full_scope)
+               api_scope (str): 'enterprise' or 'global' (for SDK calls)
+               template_key (str): The actual key of the template (e.g., 'myTemplate')
+               full_scope (str): The full scope identifier (e.g., 'enterprise_12345' or 'global')
+    Raises:
+        ValueError: If the format is invalid.
+    """
     if not template_id_full or '_' not in template_id_full:
         raise ValueError(f"Invalid template ID format: {template_id_full}")
-    scope_parts = template_id_full.split('_')
-    if len(scope_parts) < 2:
-         raise ValueError(f"Template ID format incorrect, expected scope_templateKey: {template_id_full}")
-    scope_str = scope_parts[0] # 'enterprise' or 'global'
-    template_key = '_'.join(scope_parts[1:])
-    # Validate scope format for API call
-    if not scope_str.startswith('enterprise') and scope_str != 'global':
-         raise ValueError(f"Invalid scope in template ID: {scope_str}")
-    # Return the scope string needed for API calls ('enterprise' or 'global')
-    api_scope = 'enterprise' if scope_str.startswith('enterprise') else 'global'
-    return api_scope, template_key
+    
+    # Find the last underscore to separate the key
+    last_underscore_index = template_id_full.rfind('_')
+    if last_underscore_index == 0 or last_underscore_index == len(template_id_full) - 1:
+        # Should not start or end with underscore, and must have scope and key
+        raise ValueError(f"Template ID format incorrect, expected scope_templateKey: {template_id_full}")
+        
+    full_scope = template_id_full[:last_underscore_index]
+    template_key = template_id_full[last_underscore_index + 1:]
+    
+    # Determine api_scope ('enterprise' or 'global') for SDK calls
+    if full_scope.startswith('enterprise'):
+        api_scope = 'enterprise'
+    elif full_scope == 'global':
+        api_scope = 'global'
+    else:
+        raise ValueError(f"Invalid scope in template ID: {full_scope}")
+        
+    logger.debug(f"Parsed template ID '{template_id_full}' -> api_scope='{api_scope}', template_key='{template_key}', full_scope='{full_scope}'")
+    return api_scope, template_key, full_scope
 
-def apply_metadata_to_file_direct(client, file_id, file_name, metadata_values, scope_str, template_key):
+def apply_metadata_to_file_direct(client, file_id, file_name, metadata_values, api_scope, template_key):
     """
     Applies metadata to a single file, handling type conversion and errors.
     (Internal function called by apply_metadata_direct)
+    
+    Args:
+        client: Box client object
+        file_id (str): ID of the file.
+        file_name (str): Name of the file.
+        metadata_values (dict): Extracted metadata (before filtering/conversion).
+        api_scope (str): 'enterprise' or 'global' (for SDK calls).
+        template_key (str): The actual template key (e.g., 'homeLoan').
+        
+    Returns:
+        tuple: (success_flag, message_string)
     """
-    logger.info(f"Starting metadata application for file ID {file_id} ({file_name}) with template {scope_str}/{template_key}")
+    logger.info(f"Starting metadata application for file ID {file_id} ({file_name}) with template {api_scope}/{template_key}")
     
     try:
-        # 1. Pre-process metadata: Flatten (if needed) and filter confidence fields
-        # flattened_values = flatten_metadata_for_template(metadata_values) # Apply if structure requires it
-        filtered_metadata = filter_confidence_fields(metadata_values)
+        # 1. Pre-process metadata: Filter confidence fields
+        # Flattening might be needed depending on extraction results structure
+        # flattened_values = flatten_metadata_for_template(metadata_values) 
+        filtered_metadata = filter_confidence_fields(metadata_values) # Use metadata_values directly if not flattening
         logger.debug(f"File ID {file_id}: Filtered metadata (no confidence): {filtered_metadata}")
 
-        # 2. Get template schema (using the specific scope/key for this file)
-        template_schema = get_template_schema(client, scope_str, template_key)
+        # 2. Get template schema (using the correctly parsed api_scope/template_key)
+        template_schema = get_template_schema(client, api_scope, template_key)
         if template_schema is None:
             # Error already logged by get_template_schema
-            error_msg = f"Could not retrieve template schema for {scope_str}/{template_key}. Cannot apply metadata to file {file_id} ({file_name})."
-            st.error(f"Schema retrieval failed for {template_key}. Cannot apply metadata to {file_name}.")
+            error_msg = f"Could not retrieve template schema for {api_scope}/{template_key}. Cannot apply metadata to file {file_id} ({file_name})."
+            # Display a more user-friendly error in the UI
+            st.error(f"Schema retrieval failed for template '{template_key}'. Cannot apply metadata to {file_name}. Check template key and permissions.")
             return False, error_msg
         if not template_schema: # Empty schema
-             logger.warning(f"Template schema for {scope_str}/{template_key} is empty. No fields to apply for file {file_id} ({file_name}).")
+             logger.warning(f"Template schema for {api_scope}/{template_key} is empty. No fields to apply for file {file_id} ({file_name}).")
+             st.info(f"Template '{template_key}' has no fields. Nothing to apply to {file_name}.")
              return True, "Template schema is empty, nothing to apply."
 
         # 3. Prepare metadata payload based on schema
@@ -268,8 +295,8 @@ def apply_metadata_to_file_direct(client, file_id, file_name, metadata_values, s
         # 5. Apply metadata via Box API
         logger.info(f"Attempting to apply metadata to file {file_id}: {metadata_to_apply}")
         try:
-            # Use the correct scope_str ('enterprise' or 'global') for the API call
-            updated_metadata = client.file(file_id).metadata(scope=scope_str, template=template_key).update(metadata_to_apply)
+            # Use the correct api_scope ('enterprise' or 'global') and template_key for the SDK call
+            updated_metadata = client.file(file_id).metadata(scope=api_scope, template=template_key).update(metadata_to_apply)
             success_msg = f"Metadata updated successfully for {file_name}."
             logger.info(success_msg)
             if conversion_errors:
@@ -283,7 +310,7 @@ def apply_metadata_to_file_direct(client, file_id, file_name, metadata_values, s
             if e.status == 404: # Metadata instance doesn't exist, so create it
                 logger.info(f"Metadata instance not found for file {file_id}, template {template_key}. Creating new instance.")
                 try:
-                    created_metadata = client.file(file_id).metadata(scope=scope_str, template=template_key).create(metadata_to_apply)
+                    created_metadata = client.file(file_id).metadata(scope=api_scope, template=template_key).create(metadata_to_apply)
                     success_msg = f"Metadata created successfully for {file_name}."
                     logger.info(success_msg)
                     if conversion_errors:
@@ -314,7 +341,7 @@ def apply_metadata_to_file_direct(client, file_id, file_name, metadata_values, s
 def apply_metadata_direct():
     """
     Main Streamlit page function to apply metadata using the direct approach.
-    Restored logic to use per-file template mapping based on categorization.
+    Uses corrected template ID parsing and per-file template mapping.
     """
     st.title("Apply Metadata")
     
@@ -385,15 +412,13 @@ def apply_metadata_direct():
     
     processing_state = st.session_state.processing_state
     logger.info(f"Processing state keys: {list(processing_state.keys())}")
-    # st.sidebar.write("🔍 RAW processing_state") # Keep original sidebar dump if needed
-    # st.sidebar.json(processing_state)
     
     results_map = processing_state.get("results", {})
     file_id_to_file_name = {str(f["id"]): f["name"] for f in st.session_state.get("selected_files", []) if isinstance(f, dict) and "id" in f}
     
     # --- Determine Default Template (used if no mapping found) --- 
     default_template_id_full = None
-    default_scope_str = None
+    default_api_scope = None
     default_template_key = None
     has_default_template = False
     
@@ -401,17 +426,15 @@ def apply_metadata_direct():
         default_template_id_full = st.session_state.metadata_config.get("template_id")
         if default_template_id_full:
             try:
-                default_scope_str, default_template_key = parse_template_id(default_template_id_full)
+                # Use the corrected parsing function
+                default_api_scope, default_template_key, _ = parse_template_id(default_template_id_full)
                 has_default_template = True
-                logger.info(f"Default template configured: Scope='{default_scope_str}', Key='{default_template_key}'")
+                logger.info(f"Default template configured: API Scope='{default_api_scope}', Key='{default_template_key}'")
             except ValueError as e:
                 st.error(f"Invalid default template ID format in configuration ('{default_template_id_full}'): {e}")
-                # Cannot proceed without a valid default if mappings fail
                 return 
         else:
              logger.warning("Structured extraction selected, but no default template ID found in metadata_config.")
-             # Decide if this is an error or if we should skip files without mappings
-             # For now, let's allow proceeding but warn.
              st.warning("Structured extraction selected, but no default template configured. Files without specific mappings will be skipped.")
     else:
         st.warning("Structured extraction with a template was not selected or configured. Cannot apply metadata using a template.")
@@ -450,8 +473,8 @@ def apply_metadata_direct():
                  error_count += 1
                  continue
                  
-            # --- Determine Template for THIS file --- 
-            file_scope_str = None
+            # --- Determine Template for THIS file using CORRECTED parsing --- 
+            file_api_scope = None
             file_template_key = None
             template_source = "Default"
             
@@ -462,9 +485,10 @@ def apply_metadata_direct():
                     mapped_template_id = doc_type_to_template_map[doc_type]
                     if mapped_template_id:
                         try:
-                            file_scope_str, file_template_key = parse_template_id(mapped_template_id)
+                            # Use the corrected parsing function
+                            file_api_scope, file_template_key, _ = parse_template_id(mapped_template_id)
                             template_source = f"Mapping for '{doc_type}'"
-                            logger.info(f"Using mapped template for file {file_id} ({doc_type}): {file_scope_str}/{file_template_key}")
+                            logger.info(f"Using mapped template for file {file_id} ({doc_type}): {file_api_scope}/{file_template_key}")
                         except ValueError as e:
                             logger.warning(f"Invalid template ID '{mapped_template_id}' mapped for doc type '{doc_type}'. Falling back to default. Error: {e}")
                     else:
@@ -477,10 +501,10 @@ def apply_metadata_direct():
             # 2. Fallback to default if no specific template was found/valid
             if not file_template_key:
                 if has_default_template:
-                    file_scope_str = default_scope_str
+                    file_api_scope = default_api_scope
                     file_template_key = default_template_key
                     template_source = "Default"
-                    logger.info(f"Using default template for file {file_id}: {file_scope_str}/{file_template_key}")
+                    logger.info(f"Using default template for file {file_id}: {file_api_scope}/{file_template_key}")
                 else:
                     # No specific mapping AND no valid default template
                     logger.warning(f"No specific template mapping and no valid default template configured. Skipping metadata application for file {file_id} ({file_name}).")
@@ -492,14 +516,14 @@ def apply_metadata_direct():
             # Display which template is being used
             status_text.text(f"Applying metadata to {file_name} using template '{file_template_key}' ({template_source})... ({i+1}/{total_files})")
 
-            # --- Call internal function with the determined scope/key --- 
+            # --- Call internal function with the determined api_scope/template_key --- 
             success, message = apply_metadata_to_file_direct(
                 client,
                 file_id,
                 file_name,
                 metadata_values, 
-                file_scope_str, # Pass the specific scope for this file
-                file_template_key # Pass the specific key for this file
+                file_api_scope,    # Pass the specific api_scope for this file
+                file_template_key  # Pass the specific template_key for this file
             )
             
             if success:
