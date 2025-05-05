@@ -47,48 +47,89 @@ def document_categorization():
             "rejection": 0.4
         }
     
-    # Initialize document types if not exists (NEW STRUCTURE: List of Dicts)
-    if "document_types" not in st.session_state:
-        st.session_state.document_types = [
-            {"name": "Sales Contract", "description": "Contracts related to sales agreements and terms."},
-            {"name": "Invoices", "description": "Billing documents issued by a seller to a buyer, indicating quantities, prices for products or services."},
-            {"name": "Tax", "description": "Documents related to government taxation (e.g., tax forms, filings, receipts)."},
-            {"name": "Financial Report", "description": "Reports detailing the financial status or performance of an entity (e.g., balance sheets, income statements)."},
-            {"name": "Employment Contract", "description": "Agreements outlining terms and conditions of employment between an employer and employee."},
-            {"name": "PII", "description": "Documents containing Personally Identifiable Information that needs careful handling."},
-            {"name": "Other", "description": "Any document not fitting into the specific categories above."}
-        ]
-    
     # Display selected files
     num_files = len(st.session_state.selected_files)
     st.write(f"Ready to categorize {num_files} files using Box AI.")
     
     # Create tabs for main interface and settings
-    tab1, tab2 = st.tabs(["Categorization", "Settings"])
+    tab1, tab2 = st.tabs(["Categorization", "Confidence Settings"])
     
     with tab1:
         # AI Model selection
-        ai_models = [
-            "azure__openai__gpt_4o_mini",
-            "azure__openai__gpt_4o_2024_05_13",
-            "google__gemini_2_0_flash_001",
-            "google__gemini_2_0_flash_lite_preview",
-            "google__gemini_1_5_flash_001",
-            "google__gemini_1_5_pro_001",
-            "aws__claude_3_haiku",
-            "aws__claude_3_sonnet",
-            "aws__claude_3_5_sonnet",
-            "aws__claude_3_7_sonnet",
-            "aws__titan_text_lite"
-        ]
-        
-        selected_model = st.selectbox(
+        # Updated list of models with descriptions for Q&A/Categorization
+        # Sourced from https://developer.box.com/guides/box-ai/ai-models/ (May 5, 2025)
+        # Models supporting /ai/ask (Q&A) might differ slightly from /ai/extract
+        ai_models_with_desc = {
+            "azure__openai__gpt_4_1_mini": "Azure OpenAI GPT-4.1 Mini: Lightweight multimodal model (Default for Box AI for Docs/Notes Q&A)",
+            "google__gemini_2_0_flash_lite_preview": "Google Gemini 2.0 Flash Lite: Lightweight multimodal model (Preview)",
+            "azure__openai__gpt_4o_mini": "Azure OpenAI GPT-4o Mini: Lightweight multimodal model",
+            "azure__openai__gpt_4o": "Azure OpenAI GPT-4o: Highly efficient multimodal model for complex tasks",
+            "azure__openai__gpt_4_1": "Azure OpenAI GPT-4.1: Highly efficient multimodal model for complex tasks",
+            "azure__openai__gpt_o3": "Azure OpenAI GPT o3: Highly efficient multimodal model for complex tasks", # Name as per docs
+            "azure__openai__gpt_o4-mini": "Azure OpenAI GPT o4-mini: Highly efficient multimodal model for complex tasks", # Name as per docs
+            "google__gemini_2_5_pro_preview": "Google Gemini 2.5 Pro: Optimal for high-volume, high-frequency tasks (Preview)",
+            "google__gemini_2_5_flash_preview": "Google Gemini 2.5 Flash: Optimal for high-volume, high-frequency tasks (Preview)",
+            "google__gemini_2_0_flash_001": "Google Gemini 2.0 Flash: Optimal for high-volume, high-frequency tasks",
+            "google__gemini_1_5_flash_001": "Google Gemini 1.5 Flash: High volume tasks & latency-sensitive applications",
+            "google__gemini_1_5_pro_001": "Google Gemini 1.5 Pro: Foundation model for various multimodal tasks",
+            "aws__claude_3_haiku": "AWS Claude 3 Haiku: Tailored for various language tasks",
+            "aws__claude_3_sonnet": "AWS Claude 3 Sonnet: Advanced language tasks, comprehension & context handling",
+            "aws__claude_3_5_sonnet": "AWS Claude 3.5 Sonnet: Enhanced language understanding and generation",
+            "aws__claude_3_7_sonnet": "AWS Claude 3.7 Sonnet: Enhanced language understanding and generation",
+            "aws__titan_text_lite": "AWS Titan Text Lite: Advanced language processing, extensive contexts",
+            "ibm__llama_3_2_instruct": "IBM Llama 3.2 Instruct: Instruction-tuned text model for dialogue, retrieval, summarization",
+            "ibm__llama_4_scout": "IBM Llama 4 Scout: Natively multimodal model for text and multimodal experiences",
+            "xai__grok_3_beta": "xAI Grok 3: Excels at data extraction, coding, summarization (Beta)",
+            "xai__grok_3_mini_beta": "xAI Grok 3 Mini: Lightweight model for logic-based tasks (Beta)"
+            # Note: Models primarily for embeddings are excluded.
+        }
+
+        # Get the list of model names (keys)
+        ai_model_names = list(ai_models_with_desc.keys())
+
+        # Get the list of descriptions (values) to display in the dropdown
+        ai_model_options = list(ai_models_with_desc.values())
+
+        # Get current or default model name
+        # Use a different session state key if needed, or reuse if config is shared
+        # Assuming a dedicated state for categorization model for now:
+        if "categorization_ai_model" not in st.session_state:
+            st.session_state.categorization_ai_model = ai_model_names[0] # Default to first model
+
+        current_model_name = st.session_state.categorization_ai_model
+
+        # Find the index of the currently selected model's description
+        try:
+            current_model_desc = ai_models_with_desc.get(current_model_name, ai_model_options[0])
+            selected_index = ai_model_options.index(current_model_desc)
+        except (ValueError, KeyError):
+            logger.warning(f"Previously selected categorization model '{current_model_name}' not found. Defaulting to first model.")
+            selected_index = 0
+            current_model_name = ai_model_names[selected_index]
+            st.session_state.categorization_ai_model = current_model_name # Update session state
+
+        # Use descriptions in the selectbox options
+        selected_model_desc = st.selectbox(
             "Select AI Model for Categorization",
-            options=ai_models,
-            index=0,
-            key="ai_model_select_cat",
-            help="Choose the AI model to use for document categorization"
+            options=ai_model_options,
+            index=selected_index,
+            key="ai_model_select_cat", # Keep existing key
+            help="Choose the AI model for categorization. (Preview)/(Beta) indicates models not fully tested."
         )
+
+        # Find the model name (key) corresponding to the selected description
+        selected_model_name = ""
+        for name, desc in ai_models_with_desc.items():
+            if desc == selected_model_desc:
+                selected_model_name = name
+                break
+
+        # Update the session state with the selected model name
+        st.session_state.categorization_ai_model = selected_model_name
+
+        # Store the selected model name for backend use (if not already done by session state)
+        # This variable 'selected_model' will be used later in the start_button logic
+        selected_model = selected_model_name
         
         # Enhanced categorization options
         st.write("### Categorization Options")
@@ -192,6 +233,7 @@ def document_categorization():
                             # Check if second-stage is needed
                             if use_two_stage and result["confidence"] < confidence_threshold:
                                 st.info(f"Low confidence ({result['confidence']:.2f}) for {file_name}, performing detailed analysis...")
+                                
                                 # Second-stage categorization with more detailed prompt
                                 detailed_result = categorize_document_detailed(file_id, selected_model, result["document_type"])
                                 
@@ -208,15 +250,22 @@ def document_categorization():
                         document_features = extract_document_features(file_id)
                         
                         # Calculate multi-factor confidence
-                        # Extract names for calculation function
-                        document_type_names = [dtype["name"] for dtype in st.session_state.document_types]
+                        document_types = [
+                            "Sales Contract",
+                            "Invoices",
+                            "Tax",
+                            "Financial Report",
+                            "Employment Contract",
+                            "PII",
+                            "Other"
+                        ]
                         
                         multi_factor_confidence = calculate_multi_factor_confidence(
                             result["confidence"],
                             document_features,
                             result["document_type"],
                             result.get("reasoning", ""),
-                            document_type_names # Pass only names here
+                            document_types
                         )
                         
                         # Apply confidence calibration if available
@@ -264,7 +313,7 @@ def document_categorization():
                     st.warning(f"Categorization complete! Processed {num_processed} files with {num_errors} errors.")
         
         # Display categorization results
-        if st.session_state.document_categorization.get("is_categorized", False):
+        if st.session_state.document_categorization["is_categorized"]:
             display_categorization_results()
     
     with tab2:
@@ -274,121 +323,9 @@ def document_categorization():
         # Confidence threshold configuration
         configure_confidence_thresholds()
         
-        # Document Types Configuration
-        st.write("### Document Types Configuration")
-        configure_document_types()
-        
         # Confidence validation
         with st.expander("Confidence Validation", expanded=False):
             validate_confidence_with_examples()
-
-def configure_document_types():
-    """
-    Configure user-defined document types with descriptions.
-    """
-    st.write("Define custom document types and their descriptions for categorization:")
-    
-    # Ensure document_types exists and is a list of dicts
-    if "document_types" not in st.session_state or not isinstance(st.session_state.document_types, list):
-        # Initialize or reset to default structure if invalid
-        st.session_state.document_types = [
-            {"name": "Sales Contract", "description": "Contracts related to sales agreements and terms."},
-            {"name": "Invoices", "description": "Billing documents issued by a seller to a buyer, indicating quantities, prices for products or services."},
-            {"name": "Tax", "description": "Documents related to government taxation (e.g., tax forms, filings, receipts)."},
-            {"name": "Financial Report", "description": "Reports detailing the financial status or performance of an entity (e.g., balance sheets, income statements)."},
-            {"name": "Employment Contract", "description": "Agreements outlining terms and conditions of employment between an employer and employee."},
-            {"name": "PII", "description": "Documents containing Personally Identifiable Information that needs careful handling."},
-            {"name": "Other", "description": "Any document not fitting into the specific categories above."}
-        ]
-        logger.warning("Document types state was missing or invalid, reset to default structure.")
-
-    # Display current document types with descriptions and delete buttons
-    indices_to_delete = []
-    for i, doc_type_dict in enumerate(st.session_state.document_types):
-        is_other_type = doc_type_dict.get("name") == "Other"
-        
-        with st.container():
-            st.markdown(f"**Document Type {i+1}**")
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                # Input for Name
-                current_name = doc_type_dict.get("name", "")
-                new_name = st.text_input(
-                    f"Name", 
-                    value=current_name, 
-                    key=f"doc_type_name_{i}", 
-                    disabled=is_other_type, 
-                    help="The name of the document category."
-                )
-                if new_name != current_name and not is_other_type:
-                    # Check for duplicate names before updating
-                    if any(d["name"] == new_name for j, d in enumerate(st.session_state.document_types) if i != j):
-                        st.warning(f"Document type name '{new_name}' already exists.")
-                    else:
-                        st.session_state.document_types[i]["name"] = new_name
-                        logger.info(f"Updated document type name at index {i} to: {new_name}")
-                        # No rerun here, allow multiple edits before rerun
-
-                # Input for Description
-                current_desc = doc_type_dict.get("description", "")
-                new_desc = st.text_area(
-                    f"Description", 
-                    value=current_desc, 
-                    key=f"doc_type_desc_{i}", 
-                    disabled=is_other_type, 
-                    height=100,
-                    help="Provide a clear description for the AI to understand this category."
-                )
-                if new_desc != current_desc and not is_other_type:
-                    st.session_state.document_types[i]["description"] = new_desc
-                    logger.info(f"Updated document type description at index {i}")
-                    # No rerun here
-
-            with col2:
-                # Delete button (disabled for "Other")
-                st.write("&nbsp;") # Add space for alignment
-                if st.button("Delete", key=f"delete_type_{i}", disabled=is_other_type):
-                    indices_to_delete.append(i)
-                    logger.info(f"Marked document type at index {i} for deletion.")
-            st.markdown("---")
-
-    # Process deletions if any button was pressed
-    if indices_to_delete:
-        # Sort indices in reverse order to avoid index shifting issues during deletion
-        indices_to_delete.sort(reverse=True)
-        for index in indices_to_delete:
-            deleted_type = st.session_state.document_types.pop(index)
-            logger.info(f"Deleted document type: {deleted_type.get('name')}")
-        st.rerun() # Rerun after deletion to update the UI
-
-    # Add new document type section
-    st.write("**Add New Document Type**")
-    new_type_name = st.text_input("New Type Name", key="new_doc_type_name")
-    new_type_desc = st.text_area("New Type Description", key="new_doc_type_desc", height=100)
-    
-    if st.button("Add Document Type") and new_type_name:
-        # Check if name already exists
-        if any(d['name'] == new_type_name for d in st.session_state.document_types):
-            st.warning(f"Document type name '{new_type_name}' already exists.")
-        else:
-            new_doc_type = {"name": new_type_name, "description": new_type_desc}
-            st.session_state.document_types.append(new_doc_type)
-            logger.info(f"Added new document type: {new_doc_type}")
-            st.rerun() # Rerun to display the newly added type
-    
-    # Reset to defaults button
-    if st.button("Reset to Defaults"):
-        st.session_state.document_types = [
-            {"name": "Sales Contract", "description": "Contracts related to sales agreements and terms."},
-            {"name": "Invoices", "description": "Billing documents issued by a seller to a buyer, indicating quantities, prices for products or services."},
-            {"name": "Tax", "description": "Documents related to government taxation (e.g., tax forms, filings, receipts)."},
-            {"name": "Financial Report", "description": "Reports detailing the financial status or performance of an entity (e.g., balance sheets, income statements)."},
-            {"name": "Employment Contract", "description": "Agreements outlining terms and conditions of employment between an employer and employee."},
-            {"name": "PII", "description": "Documents containing Personally Identifiable Information that needs careful handling."},
-            {"name": "Other", "description": "Any document not fitting into the specific categories above."}
-        ]
-        logger.info("Reset document types to default values.")
-        st.rerun()
 
 def display_categorization_results():
     """
@@ -397,14 +334,11 @@ def display_categorization_results():
     st.write("### Categorization Results")
     
     # Get results from session state
-    results = st.session_state.document_categorization.get("results", {})
+    results = st.session_state.document_categorization["results"]
     
     if not results:
         st.info("No categorization results available.")
         return
-    
-    # Extract category names for UI elements
-    document_type_names = [dtype['name'] for dtype in st.session_state.document_types]
     
     # Create tabs for different views
     tab1, tab2 = st.tabs(["Table View", "Detailed View"])
@@ -429,8 +363,8 @@ def display_categorization_results():
                 confidence_color = "red"
             
             results_data.append({
-                "File Name": result.get("file_name", "Unknown"),
-                "Document Type": result.get("document_type", "N/A"),
+                "File Name": result["file_name"],
+                "Document Type": result["document_type"],
                 "Confidence": f"<span style='color: {confidence_color};'>{confidence_level} ({confidence:.2f})</span>",
                 "Status": status
             })
@@ -444,25 +378,18 @@ def display_categorization_results():
                 df.to_html(escape=False, index=False),
                 unsafe_allow_html=True
             )
-        else:
-            st.info("No results to display in table view.")
     
     with tab2:
         # Create detailed view with confidence visualization
-        if not results:
-             st.info("No results to display in detailed view.")
-             return
-             
         for file_id, result in results.items():
-            with st.container(border=True):
-                st.write(f"### {result.get('file_name', 'Unknown')}")
+            with st.container():
+                st.write(f"### {result['file_name']}")
                 
                 col1, col2 = st.columns([2, 1])
                 
                 with col1:
                     # Display document type and confidence
-                    current_doc_type = result.get("document_type", "N/A")
-                    st.write(f"**Category:** {current_doc_type}")
+                    st.write(f"**Category:** {result['document_type']}")
                     
                     # Display confidence visualization
                     if "multi_factor_confidence" in result:
@@ -496,7 +423,7 @@ def display_categorization_results():
                     if "multi_factor_confidence" in result:
                         explanations = get_confidence_explanation(
                             result["multi_factor_confidence"],
-                            current_doc_type
+                            result["document_type"]
                         )
                         st.info(explanations["overall"])
                     
@@ -512,22 +439,27 @@ def display_categorization_results():
                 
                 with col2:
                     # Category override
+                    document_types = [
+                        "Sales Contract",
+                        "Invoices",
+                        "Tax",
+                        "Financial Report",
+                        "Employment Contract",
+                        "PII",
+                        "Other"
+                    ]
+                    
                     st.write("**Override Category:**")
-                    try:
-                        current_index = document_type_names.index(current_doc_type) if current_doc_type in document_type_names else 0
-                    except ValueError:
-                        current_index = 0 # Default to first item if current type not found
-                        
                     new_category = st.selectbox(
                         "Select category",
-                        options=document_type_names, # Use only names for options
-                        index=current_index,
+                        options=document_types,
+                        index=document_types.index(result["document_type"]) if result["document_type"] in document_types else 0,
                         key=f"override_{file_id}"
                     )
                     
                     if st.button("Apply Override", key=f"apply_override_{file_id}"):
                         # Save feedback for calibration
-                        save_categorization_feedback(file_id, current_doc_type, new_category)
+                        save_categorization_feedback(file_id, result["document_type"], new_category)
                         
                         # Update the result
                         st.session_state.document_categorization["results"][file_id]["document_type"] = new_category
@@ -536,23 +468,35 @@ def display_categorization_results():
                         st.session_state.document_categorization["results"][file_id]["reasoning"] += "\n\nManually overridden by user."
                         st.session_state.document_categorization["results"][file_id]["status"] = "Accepted"
                         
-                        logger.info(f"User override applied for file {file_id}. New category: {new_category}")
                         st.success(f"Category updated to {new_category}")
                         st.rerun()
                     
-                    # Document preview (Optional - Placeholder)
-                    # st.write("**Document Preview:**")
-                    # preview_url = get_document_preview_url(file_id)
-                    # if preview_url:
-                    #     st.image(preview_url, caption="Document Preview", use_column_width=True)
-                    # else:
-                    #     st.info("Preview not available.")
+                    # Document preview
+                    st.write("**Document Preview:**")
+                    
+                    # Get document preview using Box API
+                    preview_url = get_document_preview_url(file_id)
+                    
+                    if preview_url:
+                        st.image(preview_url, caption="Document Preview", use_column_width=True)
+                    else:
+                        # Fallback to document properties
+                        client = st.session_state.client
+                        try:
+                            file_info = client.file(file_id).get()
+                            
+                            st.write(f"**Size:** {file_info.size / 1024:.1f} KB")
+                            st.write(f"**Created:** {file_info.created_at}")
+                            st.write(f"**Modified:** {file_info.modified_at}")
+                            st.write(f"**Type:** {file_info.type}")
+                        except Exception as e:
+                            st.write("Could not retrieve file information")
                 
-                # User feedback section (Optional - Placeholder)
-                # with st.expander("Provide Feedback", expanded=False):
-                #     collect_user_feedback(file_id, result)
+                # User feedback section
+                with st.expander("Provide Feedback", expanded=False):
+                    collect_user_feedback(file_id, result)
                 
-                # st.markdown("---") # Separator removed, using container border
+                st.markdown("---")
         
         # Continue button
         st.write("---")
@@ -587,19 +531,23 @@ def categorize_document(file_id: str, model: str = "azure__openai__gpt_4o_mini")
         'Content-Type': 'application/json'
     }
     
-    # Get document types (list of dicts) from session state
-    document_types_with_desc = st.session_state.document_types
-    document_type_names = [dtype['name'] for dtype in document_types_with_desc]
+    # Define document types to categorize
+    document_types = [
+        "Sales Contract",
+        "Invoices",
+        "Tax",
+        "Financial Report",
+        "Employment Contract",
+        "PII",
+        "Other"
+    ]
     
     # Create prompt for document categorization with confidence score request
-    # Include descriptions in the prompt
-    category_options_text = "\n".join([f"- {dtype['name']}: {dtype['description']}" for dtype in document_types_with_desc])
-    
     prompt = (
-        f"Analyze this document and determine which category it belongs to from the following options:\n"
-        f"{category_options_text}\n\n"
-        f"Provide your answer ONLY in the following format (exactly two lines):\n"
-        f"Category: [selected category name]\n"
+        f"Analyze this document and determine which category it belongs to from the following options: "
+        f"{', '.join(document_types)}. "
+        f"Provide your answer in the following format:\n"
+        f"Category: [selected category]\n"
         f"Confidence: [confidence score between 0 and 1, where 1 is highest confidence]\n"
         f"Reasoning: [detailed explanation of your categorization, including key features of the document that support this categorization]"
     )
@@ -635,14 +583,7 @@ def categorize_document(file_id: str, model: str = "azure__openai__gpt_4o_mini")
         logger.info(f"Box AI API response status: {response.status_code}")
         if response.status_code != 200:
             logger.error(f"Box AI API error response: {response.text}")
-            # Try to parse error details from Box response
-            error_details = "Unknown error"
-            try:
-                error_json = response.json()
-                error_details = error_json.get('message', response.text)
-            except json.JSONDecodeError:
-                error_details = response.text
-            raise Exception(f"Error in Box AI API call: {response.status_code}. Details: {error_details}")
+            raise Exception(f"Error in Box AI API call: {response.status_code} Client Error: Bad Request for url: {api_url}")
         
         # Parse response
         response_data = response.json()
@@ -653,7 +594,7 @@ def categorize_document(file_id: str, model: str = "azure__openai__gpt_4o_mini")
             answer_text = response_data["answer"]
             
             # Parse the structured response to extract category, confidence, and reasoning
-            document_type, confidence, reasoning = parse_categorization_response(answer_text, document_type_names)
+            document_type, confidence, reasoning = parse_categorization_response(answer_text, document_types)
             
             return {
                 "document_type": document_type,
@@ -662,16 +603,15 @@ def categorize_document(file_id: str, model: str = "azure__openai__gpt_4o_mini")
             }
         
         # If no answer in response, return default
-        logger.warning(f"No 'answer' field found in Box AI response for file {file_id}. Response: {response_data}")
         return {
             "document_type": "Other",
             "confidence": 0.0,
-            "reasoning": "Could not determine document type (No answer from AI)"
+            "reasoning": "Could not determine document type"
         }
     
     except Exception as e:
-        logger.exception(f"Error during Box AI API call or parsing for file {file_id}: {str(e)}")
-        raise Exception(f"Error categorizing document {file_id}: {str(e)}")
+        logger.error(f"Error in Box AI API call: {str(e)}")
+        raise Exception(f"Error categorizing document: {str(e)}")
 
 def categorize_document_detailed(file_id: str, model: str, initial_category: str) -> Dict[str, Any]:
     """
@@ -701,24 +641,28 @@ def categorize_document_detailed(file_id: str, model: str, initial_category: str
         'Content-Type': 'application/json'
     }
     
-    # Get document types (list of dicts) from session state
-    document_types_with_desc = st.session_state.document_types
-    document_type_names = [dtype['name'] for dtype in document_types_with_desc]
+    # Define document types to categorize
+    document_types = [
+        "Sales Contract",
+        "Invoices",
+        "Tax",
+        "Financial Report",
+        "Employment Contract",
+        "PII",
+        "Other"
+    ]
     
-    # Create a more detailed prompt for second-stage analysis, including descriptions
-    category_options_text = "\n".join([f"- {dtype['name']}: {dtype['description']}" for dtype in document_types_with_desc])
-
+    # Create a more detailed prompt for second-stage analysis
     prompt = (
         f"Analyze this document in detail to determine its category. "
         f"The initial categorization suggested it might be '{initial_category}', but we need a more thorough analysis.\n\n"
-        f"Consider the following categories and their descriptions:\n"
-        f"{category_options_text}\n\n"
-        f"For each category listed above, provide a score from 0-10 indicating how well the document matches that category, "
-        f"along with specific evidence from the document supporting your score.\n\n"
-        f"Finally, provide your definitive categorization ONLY in the following format (exactly two lines):\n"
-        f"Category: [selected category name]\n"
+        f"For each of the following categories, provide a score from 0-10 indicating how well the document matches that category, "
+        f"along with specific evidence from the document:\n\n"
+        f"{', '.join(document_types)}\n\n"
+        f"Then provide your final categorization in the following format:\n"
+        f"Category: [selected category]\n"
         f"Confidence: [confidence score between 0 and 1, where 1 is highest confidence]\n"
-        f"Reasoning: [detailed explanation with specific evidence from the document supporting your final choice]"
+        f"Reasoning: [detailed explanation with specific evidence from the document]"
     )
     
     # Construct API URL for Box AI Ask
@@ -751,25 +695,21 @@ def categorize_document_detailed(file_id: str, model: str, initial_category: str
         # Check response
         if response.status_code != 200:
             logger.error(f"Box AI API error response: {response.text}")
-            # Try to parse error details
-            error_details = "Unknown error"
-            try:
-                error_json = response.json()
-                error_details = error_json.get('message', response.text)
-            except json.JSONDecodeError:
-                error_details = response.text
-            raise Exception(f"Error in detailed Box AI API call: {response.status_code}. Details: {error_details}")
+            raise Exception(f"Error in Box AI API call: {response.status_code} Client Error: Bad Request for url: {api_url}")
         
         # Parse response
         response_data = response.json()
-        logger.info(f"Detailed Box AI API response data: {json.dumps(response_data)}")
         
         # Extract answer from response
         if "answer" in response_data:
             answer_text = response_data["answer"]
             
-            # Parse the structured response
-            document_type, confidence, reasoning = parse_categorization_response(answer_text, document_type_names)
+            # Parse the structured response to extract category, confidence, and reasoning
+            document_type, confidence, reasoning = parse_categorization_response(answer_text, document_types)
+            
+            # Boost confidence slightly for detailed analysis
+            # This reflects the more thorough analysis performed
+            confidence = min(confidence * 1.1, 1.0)
             
             return {
                 "document_type": document_type,
@@ -777,414 +717,969 @@ def categorize_document_detailed(file_id: str, model: str, initial_category: str
                 "reasoning": reasoning
             }
         
-        # If no answer, return default
-        logger.warning(f"No 'answer' field found in detailed Box AI response for file {file_id}. Response: {response_data}")
+        # If no answer in response, return default
         return {
-            "document_type": initial_category, # Fallback to initial category
-            "confidence": 0.0,
-            "reasoning": "Could not determine document type in detailed analysis (No answer from AI)"
+            "document_type": initial_category,
+            "confidence": 0.3,
+            "reasoning": "Could not determine document type in detailed analysis"
         }
     
     except Exception as e:
-        logger.exception(f"Error during detailed Box AI API call or parsing for file {file_id}: {str(e)}")
-        raise Exception(f"Error in detailed categorization for document {file_id}: {str(e)}")
+        logger.error(f"Error in detailed Box AI API call: {str(e)}")
+        raise Exception(f"Error in detailed categorization: {str(e)}")
 
-def parse_categorization_response(response_text: str, valid_categories: List[str]) -> Tuple[str, float, str]:
+def parse_categorization_response(response_text: str, document_types: List[str]) -> Tuple[str, float, str]:
     """
-    Parse the structured response from the AI to extract category, confidence, and reasoning.
-    Handles potential variations in the AI response format.
-
+    Parse the AI response to extract document type, confidence score, and reasoning
+    
     Args:
-        response_text (str): The text response from the AI.
-        valid_categories (List[str]): A list of valid category names.
-
+        response_text: The AI response text
+        document_types: List of valid document types
+        
     Returns:
-        Tuple[str, float, str]: Extracted document type, confidence score, and reasoning.
-                                Returns ("Other", 0.0, "Parsing failed") if parsing is unsuccessful.
+        tuple: (document_type, confidence, reasoning)
     """
-    document_type = "Other" # Default category
-    confidence = 0.0       # Default confidence
-    reasoning = ""         # Default reasoning
-
+    # Default values
+    document_type = "Other"
+    confidence = 0.5
+    reasoning = response_text
+    
     try:
-        # Use regex to find Category, Confidence, and Reasoning, allowing for variations
-        category_match = re.search(r"^Category:\s*(.*?)$", response_text, re.MULTILINE | re.IGNORECASE)
-        confidence_match = re.search(r"^Confidence:\s*([0-9.]+)", response_text, re.MULTILINE | re.IGNORECASE)
-        reasoning_match = re.search(r"^Reasoning:\s*(.*)", response_text, re.MULTILINE | re.IGNORECASE | re.DOTALL)
-
+        # Try to extract category using regex
+        category_match = re.search(r"Category:\s*([^\n]+)", response_text, re.IGNORECASE)
         if category_match:
-            extracted_category = category_match.group(1).strip()
-            # Validate against known categories
-            if extracted_category in valid_categories:
-                document_type = extracted_category
-            else:
-                logger.warning(f"Extracted category '{extracted_category}' not in valid list: {valid_categories}. Defaulting to 'Other'.")
-        else:
-            logger.warning(f"Could not find 'Category:' line in response: {response_text}")
-
+            category_text = category_match.group(1).strip()
+            # Find the closest matching document type
+            for dt in document_types:
+                if dt.lower() in category_text.lower():
+                    document_type = dt
+                    break
+        
+        # Try to extract confidence using regex
+        confidence_match = re.search(r"Confidence:\s*(0\.\d+|1\.0|1)", response_text, re.IGNORECASE)
         if confidence_match:
-            try:
-                confidence = float(confidence_match.group(1))
-                # Clamp confidence between 0.0 and 1.0
-                confidence = max(0.0, min(1.0, confidence))
-            except ValueError:
-                logger.warning(f"Could not parse confidence value: {confidence_match.group(1)}. Defaulting to 0.0.")
+            confidence = float(confidence_match.group(1))
         else:
-             logger.warning(f"Could not find 'Confidence:' line in response: {response_text}")
-
+            # If no explicit confidence, try to find confidence-related words
+            confidence_words = {
+                "very high": 0.9,
+                "high": 0.8,
+                "good": 0.7,
+                "moderate": 0.6,
+                "medium": 0.5,
+                "low": 0.4,
+                "very low": 0.3,
+                "uncertain": 0.2
+            }
+            
+            for word, value in confidence_words.items():
+                if word in response_text.lower():
+                    confidence = value
+                    break
+        
+        # Try to extract reasoning
+        reasoning_match = re.search(r"Reasoning:\s*([^\n]+(?:\n[^\n]+)*)", response_text, re.IGNORECASE)
         if reasoning_match:
             reasoning = reasoning_match.group(1).strip()
-        else:
-            logger.warning(f"Could not find 'Reasoning:' line in response: {response_text}")
-            # If reasoning not found, use the whole response text after category/confidence if possible
-            lines = response_text.split('\n')
-            reasoning_lines = [line for line in lines if not line.lower().startswith('category:') and not line.lower().startswith('confidence:')]
-            reasoning = "\n".join(reasoning_lines).strip()
-            if not reasoning:
-                 reasoning = "Reasoning not provided or parsing failed."
-
+        
+        # If no document type was found in the structured response, try to find it in the full text
+        if document_type == "Other":
+            for dt in document_types:
+                if dt.lower() in response_text.lower():
+                    document_type = dt
+                    break
+        
+        return document_type, confidence, reasoning
+    
     except Exception as e:
-        logger.error(f"Error parsing categorization response: {str(e)}. Response text: {response_text}")
-        reasoning = f"Error parsing response: {str(e)}"
-
-    return document_type, confidence, reasoning
+        logger.error(f"Error parsing categorization response: {str(e)}")
+        return document_type, confidence, reasoning
 
 def extract_document_features(file_id: str) -> Dict[str, Any]:
     """
-    Extract basic features from the document (e.g., file type, size, keywords)
-    Placeholder function - needs actual implementation
+    Extract features from a document to aid in categorization
+    
+    Args:
+        file_id: Box file ID
+        
+    Returns:
+        dict: Document features
     """
-    # Placeholder: Replace with actual feature extraction logic
-    # Example: Use Box API to get file info, maybe extract text snippet
     try:
         client = st.session_state.client
-        file_info = client.file(file_id).get(fields=["size", "name", "extension"])
-        return {
-            "file_size_kb": file_info.size / 1024 if file_info.size else 0,
-            "file_extension": file_info.extension.lower() if file_info.extension else "",
-            # Add more features like keyword extraction from content if needed
-            "keyword_match_score": 0.0 # Placeholder
+        file_info = client.file(file_id).get()
+        
+        features = {
+            "extension": file_info.name.split(".")[-1].lower() if "." in file_info.name else "",
+            "size_kb": file_info.size / 1024,
+            "file_type": file_info.type
         }
+        
+        # Get text content preview if possible
+        try:
+            # Use Box API to get text representation
+            text_content = ""
+            
+            # This is a simplified approach - in a real implementation,
+            # you would use Box's content API to get text content
+            # For now, we'll extract text from the file name and type
+            text_content = f"{file_info.name} {file_info.type}"
+            
+            features["text_content"] = text_content
+        except Exception as e:
+            logger.warning(f"Could not extract text content: {str(e)}")
+            features["text_content"] = ""
+        
+        return features
     except Exception as e:
-        logger.warning(f"Could not extract features for file {file_id}: {e}")
-        return {
-            "file_size_kb": 0,
-            "file_extension": "",
-            "keyword_match_score": 0.0
-        }
+        logger.error(f"Error extracting document features: {str(e)}")
+        return {}
 
-def calculate_multi_factor_confidence(ai_confidence: float, features: Dict[str, Any], category: str, reasoning: str, all_categories: List[str]) -> Dict[str, float]:
+def calculate_multi_factor_confidence(
+    ai_confidence: float,
+    document_features: dict,
+    category: str,
+    response_text: str,
+    document_types: List[str]
+) -> dict:
     """
-    Calculate a multi-factor confidence score based on AI confidence, document features, and reasoning quality.
-    Placeholder function - needs actual implementation with weighting logic.
+    Calculate a multi-factor confidence score based on various aspects
+    
+    Args:
+        ai_confidence: The confidence score reported by the AI
+        document_features: Features extracted from the document
+        category: The assigned category
+        response_text: The full AI response text
+        document_types: List of valid document types
+        
+    Returns:
+        dict: Multi-factor confidence scores and overall confidence
     """
-    # Placeholder: Simple weighted average - Replace with more sophisticated logic
-    weights = {
-        "ai_confidence": 0.6,
-        "feature_score": 0.2, # Based on file type, size, keywords relevant to category
-        "reasoning_quality": 0.2 # Based on length, specificity, keyword presence in reasoning
+    # Initialize confidence factors
+    confidence_factors = {
+        "ai_reported": ai_confidence,
+        "response_quality": 0.0,
+        "category_specificity": 0.0,
+        "reasoning_quality": 0.0,
+        "document_features": 0.0
     }
     
-    # 1. AI Confidence (already provided)
-    ai_score = ai_confidence
+    # 1. Response Quality - How well-structured was the AI response?
+    expected_sections = ["Category:", "Confidence:", "Reasoning:"]
+    sections_found = sum(1 for section in expected_sections if section in response_text)
+    confidence_factors["response_quality"] = sections_found / len(expected_sections)
     
-    # 2. Feature Score (Example: Higher score if extension matches category expectations)
-    feature_score = 0.5 # Default
-    ext = features.get("file_extension", "")
-    if category == "Invoices" and ext in ["pdf", "docx"]:
-        feature_score = 0.8
-    elif category == "Financial Report" and ext in ["xlsx", "csv", "pdf"]:
-        feature_score = 0.7
-    # Add more rules based on features...
+    # 2. Category Specificity - How specific is the category assignment?
+    if category == "Other":
+        confidence_factors["category_specificity"] = 0.3  # Low confidence for "Other" category
+    else:
+        # Check how many times the category appears in the reasoning
+        category_mentions = len(re.findall(r'\b' + re.escape(category) + r'\b', response_text, re.IGNORECASE))
+        confidence_factors["category_specificity"] = min(0.5 + (category_mentions * 0.1), 1.0)
     
-    # 3. Reasoning Quality (Example: Score based on length and keywords)
-    reasoning_quality = 0.5 # Default
-    reasoning_len = len(reasoning)
-    if reasoning_len > 100:
-        reasoning_quality = 0.8
-    elif reasoning_len > 50:
-        reasoning_quality = 0.6
-    # Add checks for keywords relevant to the category in the reasoning...
+    # 3. Reasoning Quality - How detailed and specific is the reasoning?
+    reasoning_match = re.search(r"Reasoning:\s*([^\n]+(?:\n[^\n]+)*)", response_text, re.IGNORECASE)
+    if reasoning_match:
+        reasoning_text = reasoning_match.group(1).strip()
+        word_count = len(reasoning_text.split())
+        
+        # More detailed reasoning increases confidence
+        if word_count < 10:
+            confidence_factors["reasoning_quality"] = 0.3
+        elif word_count < 30:
+            confidence_factors["reasoning_quality"] = 0.6
+        else:
+            confidence_factors["reasoning_quality"] = 0.9
+            
+        # Check for specific keywords that indicate uncertainty
+        uncertainty_words = ["maybe", "perhaps", "possibly", "might", "could be", "uncertain", "not clear"]
+        uncertainty_count = sum(1 for word in uncertainty_words if word in reasoning_text.lower())
+        
+        # Reduce confidence based on uncertainty words
+        confidence_factors["reasoning_quality"] *= max(0.5, 1.0 - (uncertainty_count * 0.1))
     
-    # Calculate weighted overall score
-    overall_confidence = (
-        ai_score * weights["ai_confidence"] + 
-        feature_score * weights["feature_score"] + 
-        reasoning_quality * weights["reasoning_quality"]
+    # 4. Document Features - Do document features align with the category?
+    if document_features:
+        # Define feature patterns for different document types
+        category_feature_patterns = {
+            "Sales Contract": {
+                "keywords": ["agreement", "contract", "sale", "purchase", "terms", "conditions", "party"],
+                "extension_preference": ["pdf", "docx"]
+            },
+            "Invoices": {
+                "keywords": ["invoice", "bill", "payment", "amount", "total", "due", "tax"],
+                "extension_preference": ["pdf", "xlsx"]
+            },
+            "Tax": {
+                "keywords": ["tax", "return", "irs", "income", "deduction", "filing"],
+                "extension_preference": ["pdf"]
+            },
+            "Financial Report": {
+                "keywords": ["financial", "report", "statement", "balance", "income", "cash flow", "quarter", "annual"],
+                "extension_preference": ["pdf", "xlsx"]
+            },
+            "Employment Contract": {
+                "keywords": ["employment", "employee", "employer", "salary", "compensation", "termination", "confidentiality"],
+                "extension_preference": ["pdf", "docx"]
+            },
+            "PII": {
+                "keywords": ["personal", "information", "ssn", "social security", "address", "phone", "email", "confidential"],
+                "extension_preference": ["pdf", "docx", "xlsx"]
+            }
+        }
+        
+        # Calculate feature match score
+        feature_match_score = 0.5  # Default middle score
+        
+        if category in category_feature_patterns:
+            pattern = category_feature_patterns[category]
+            matches = 0
+            total_checks = 0
+            
+            # Check keywords in text content
+            if "text_content" in document_features and "keywords" in pattern:
+                total_checks += 1
+                keyword_matches = sum(1 for keyword in pattern["keywords"] if keyword in document_features["text_content"].lower())
+                if keyword_matches >= 2:
+                    matches += 1
+            
+            # Check file extension
+            if "extension" in document_features and "extension_preference" in pattern:
+                total_checks += 1
+                if document_features["extension"] in pattern["extension_preference"]:
+                    matches += 1
+            
+            # Calculate feature match score if we have checks
+            if total_checks > 0:
+                feature_match_score = matches / total_checks
+        
+        confidence_factors["document_features"] = feature_match_score
+    
+    # Calculate weighted overall confidence
+    weights = {
+        "ai_reported": 0.4,
+        "response_quality": 0.1,
+        "category_specificity": 0.2,
+        "reasoning_quality": 0.2,
+        "document_features": 0.1
+    }
+    
+    overall_confidence = sum(
+        confidence_factors[factor] * weights[factor]
+        for factor in confidence_factors
     )
     
-    # Ensure overall confidence is within [0, 1]
-    overall_confidence = max(0.0, min(1.0, overall_confidence))
+    # Add overall confidence to the result
+    confidence_factors["overall"] = overall_confidence
+    
+    return confidence_factors
+
+def display_confidence_visualization(confidence_data: dict, container=None):
+    """
+    Display a comprehensive confidence visualization
+    
+    Args:
+        confidence_data: Dictionary containing confidence factors and overall confidence
+        container: Optional Streamlit container to render in
+    """
+    # Use provided container or create a new one
+    if container is None:
+        container = st
+    
+    overall_confidence = confidence_data.get("overall", 0.0)
+    
+    # Determine confidence level and color
+    if overall_confidence >= 0.8:
+        confidence_level = "High"
+        confidence_color = "#28a745"  # Green
+    elif overall_confidence >= 0.6:
+        confidence_level = "Medium"
+        confidence_color = "#ffc107"  # Yellow
+    else:
+        confidence_level = "Low"
+        confidence_color = "#dc3545"  # Red
+    
+    # Create confidence meter
+    container.markdown(
+        f"""
+        <div style="margin-bottom: 10px;">
+            <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                <div style="font-weight: bold; margin-right: 10px;">Confidence:</div>
+                <div style="font-weight: bold; color: {confidence_color};">{confidence_level} ({overall_confidence:.2f})</div>
+            </div>
+            <div style="width: 100%; background-color: #f0f0f0; height: 10px; border-radius: 5px; overflow: hidden;">
+                <div style="width: {overall_confidence*100}%; background-color: {confidence_color}; height: 100%;"></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    # Display confidence factors if they exist
+    factors_to_display = {
+        "ai_reported": "AI Model",
+        "response_quality": "Response Quality",
+        "category_specificity": "Category Specificity",
+        "reasoning_quality": "Reasoning Quality",
+        "document_features": "Document Features"
+    }
+    
+    # Check if we have detailed factors
+    has_factors = any(factor in confidence_data for factor in factors_to_display)
+    
+    if has_factors:
+        with container.expander("Confidence Breakdown", expanded=False):
+            for factor_key, factor_name in factors_to_display.items():
+                if factor_key in confidence_data:
+                    factor_value = confidence_data[factor_key]
+                    
+                    # Determine factor color
+                    if factor_value >= 0.8:
+                        factor_color = "#28a745"  # Green
+                    elif factor_value >= 0.6:
+                        factor_color = "#ffc107"  # Yellow
+                    else:
+                        factor_color = "#dc3545"  # Red
+                    
+                    # Display factor meter
+                    container.markdown(
+                        f"""
+                        <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                            <div style="width: 150px;">{factor_name}:</div>
+                            <div style="flex-grow: 1; background-color: #f0f0f0; height: 8px; border-radius: 4px; overflow: hidden; margin: 0 10px;">
+                                <div style="width: {factor_value*100}%; background-color: {factor_color}; height: 100%;"></div>
+                            </div>
+                            <div style="width: 50px; text-align: right; color: {factor_color};">{factor_value:.2f}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+            
+            # Add explanation of factors
+            container.markdown("""
+            **Confidence Factors Explained:**
+            - **AI Model**: Confidence reported directly by the AI model
+            - **Response Quality**: How well-structured the AI response was
+            - **Category Specificity**: How specific and definitive the category assignment is
+            - **Reasoning Quality**: How detailed and specific the reasoning is
+            - **Document Features**: How well document features match the assigned category
+            """)
+
+def get_confidence_explanation(confidence_data: dict, category: str) -> dict:
+    """
+    Generate human-readable explanations of confidence scores
+    
+    Args:
+        confidence_data: Dictionary containing confidence factors and overall confidence
+        category: The assigned category
+        
+    Returns:
+        dict: Explanations for overall confidence and individual factors
+    """
+    overall_confidence = confidence_data.get("overall", 0.0)
+    
+    # Generate overall confidence explanation
+    if overall_confidence >= 0.8:
+        overall_explanation = (
+            f"High confidence ({overall_confidence:.2f}) in the '{category}' categorization. "
+            f"This result is highly reliable and can be trusted."
+        )
+    elif overall_confidence >= 0.6:
+        overall_explanation = (
+            f"Medium confidence ({overall_confidence:.2f}) in the '{category}' categorization. "
+            f"This result is reasonably reliable but may benefit from verification."
+        )
+    else:
+        overall_explanation = (
+            f"Low confidence ({overall_confidence:.2f}) in the '{category}' categorization. "
+            f"This result should be verified manually or recategorized."
+        )
+    
+    # Generate factor-specific explanations
+    factor_explanations = {}
+    
+    # AI Reported confidence
+    ai_confidence = confidence_data.get("ai_reported", 0.0)
+    if ai_confidence >= 0.8:
+        factor_explanations["ai_reported"] = f"The AI model is highly confident in its categorization."
+    elif ai_confidence >= 0.6:
+        factor_explanations["ai_reported"] = f"The AI model has moderate confidence in its categorization."
+    else:
+        factor_explanations["ai_reported"] = f"The AI model has low confidence in its categorization."
+    
+    # Response Quality
+    response_quality = confidence_data.get("response_quality", 0.0)
+    if response_quality >= 0.8:
+        factor_explanations["response_quality"] = f"The AI response was well-structured and complete."
+    elif response_quality >= 0.6:
+        factor_explanations["response_quality"] = f"The AI response was adequately structured."
+    else:
+        factor_explanations["response_quality"] = f"The AI response was poorly structured or incomplete."
+    
+    # Category Specificity
+    category_specificity = confidence_data.get("category_specificity", 0.0)
+    if category_specificity >= 0.8:
+        factor_explanations["category_specificity"] = f"The category assignment is very specific and definitive."
+    elif category_specificity >= 0.6:
+        factor_explanations["category_specificity"] = f"The category assignment is reasonably specific."
+    else:
+        factor_explanations["category_specificity"] = f"The category assignment is vague or uncertain."
+    
+    # Reasoning Quality
+    reasoning_quality = confidence_data.get("reasoning_quality", 0.0)
+    if reasoning_quality >= 0.8:
+        factor_explanations["reasoning_quality"] = f"The reasoning is detailed and specific."
+    elif reasoning_quality >= 0.6:
+        factor_explanations["reasoning_quality"] = f"The reasoning is adequate but could be more detailed."
+    else:
+        factor_explanations["reasoning_quality"] = f"The reasoning is vague, brief, or contains uncertainty."
+    
+    # Document Features
+    document_features = confidence_data.get("document_features", 0.0)
+    if document_features >= 0.8:
+        factor_explanations["document_features"] = f"The document features strongly align with the '{category}' category."
+    elif document_features >= 0.6:
+        factor_explanations["document_features"] = f"The document features somewhat align with the '{category}' category."
+    else:
+        factor_explanations["document_features"] = f"The document features don't align well with the '{category}' category."
     
     return {
-        "overall": overall_confidence,
-        "ai_confidence_factor": ai_score,
-        "feature_factor": feature_score,
-        "reasoning_factor": reasoning_quality
+        "overall": overall_explanation,
+        "factors": factor_explanations
     }
-
-def apply_confidence_calibration(category: str, confidence: float) -> float:
-    """
-    Apply calibration adjustments to confidence scores based on historical feedback.
-    Placeholder function - needs feedback loop implementation.
-    """
-    # Placeholder: Load calibration data (e.g., average accuracy per category)
-    # calibration_data = load_calibration_data() 
-    # adjustment = calibration_data.get(category, 1.0) # Multiplier or offset
-    # calibrated_confidence = confidence * adjustment
-    # return max(0.0, min(1.0, calibrated_confidence))
-    return confidence # No calibration applied in this placeholder
 
 def configure_confidence_thresholds():
     """
-    Allow users to configure confidence thresholds for categorization status.
+    Configure confidence thresholds for different actions
     """
-    st.write("Set confidence thresholds to automatically accept, flag for review, or reject categorizations:")
-    
-    current_thresholds = st.session_state.confidence_thresholds
-    
-    # Ensure thresholds are logical (auto_accept > verification > rejection)
-    auto_accept = st.slider(
-        "Auto-Accept Threshold", 
-        min_value=0.0, max_value=1.0, 
-        value=float(current_thresholds.get("auto_accept", 0.85)), 
-        step=0.05,
-        key="threshold_auto_accept",
-        help="Categories with confidence above this value will be automatically accepted."
-    )
-    
-    verification = st.slider(
-        "Verification Threshold", 
-        min_value=0.0, max_value=auto_accept, # Max is auto_accept
-        value=float(min(current_thresholds.get("verification", 0.6), auto_accept)), 
-        step=0.05,
-        key="threshold_verification",
-        help="Categories with confidence between this value and Auto-Accept need user review."
-    )
-    
-    rejection = st.slider(
-        "Rejection Threshold", 
-        min_value=0.0, max_value=verification, # Max is verification
-        value=float(min(current_thresholds.get("rejection", 0.4), verification)), 
-        step=0.05,
-        key="threshold_rejection",
-        help="Categories with confidence below this value may be flagged or rejected."
-    )
-    
-    # Update session state if changed
-    if (auto_accept != current_thresholds.get("auto_accept") or
-        verification != current_thresholds.get("verification") or
-        rejection != current_thresholds.get("rejection")):
+    # Initialize default thresholds if not in session state
+    if "confidence_thresholds" not in st.session_state:
         st.session_state.confidence_thresholds = {
-            "auto_accept": auto_accept,
-            "verification": verification,
-            "rejection": rejection
+            "auto_accept": 0.85,
+            "verification": 0.6,
+            "rejection": 0.4
         }
-        logger.info(f"Updated confidence thresholds: {st.session_state.confidence_thresholds}")
-        # No rerun needed immediately, changes apply on next categorization or result display
+    
+    # Create columns for thresholds
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.session_state.confidence_thresholds["auto_accept"] = st.slider(
+            "Auto-Accept Threshold",
+            min_value=0.0,
+            max_value=1.0,
+            value=st.session_state.confidence_thresholds["auto_accept"],
+            step=0.05,
+            help="Results with confidence above this threshold will be automatically accepted"
+        )
+    
+    with col2:
+        st.session_state.confidence_thresholds["verification"] = st.slider(
+            "Verification Threshold",
+            min_value=0.0,
+            max_value=1.0,
+            value=st.session_state.confidence_thresholds["verification"],
+            step=0.05,
+            help="Results with confidence below this threshold will be flagged for verification"
+        )
+    
+    with col3:
+        st.session_state.confidence_thresholds["rejection"] = st.slider(
+            "Rejection Threshold",
+            min_value=0.0,
+            max_value=1.0,
+            value=st.session_state.confidence_thresholds["rejection"],
+            step=0.05,
+            help="Results with confidence below this threshold will be rejected"
+        )
+    
+    # Add threshold validation
+    if st.session_state.confidence_thresholds["rejection"] >= st.session_state.confidence_thresholds["verification"]:
+        st.warning("Rejection threshold should be lower than verification threshold")
+    
+    if st.session_state.confidence_thresholds["verification"] >= st.session_state.confidence_thresholds["auto_accept"]:
+        st.warning("Verification threshold should be lower than auto-accept threshold")
+    
+    # Add threshold explanation
+    st.markdown("""
+    **Threshold Explanation:**
+    - **Auto-Accept**: Results above this threshold are considered highly reliable and can be automatically accepted
+    - **Verification**: Results below this threshold require manual verification
+    - **Rejection**: Results below this threshold are considered unreliable and should be rejected or recategorized
+    """)
 
-def apply_confidence_thresholds(results: Dict[str, Dict]) -> Dict[str, Dict]:
+def apply_confidence_thresholds(results):
     """
-    Apply status labels (Accepted, Review, Reject) based on confidence thresholds.
-    """
-    thresholds = st.session_state.confidence_thresholds
-    updated_results = {}
+    Apply confidence thresholds to categorization results
     
-    for file_id, result in results.items():
-        confidence = result.get("calibrated_confidence", result.get("confidence", 0.0))
+    Args:
+        results: Dictionary of categorization results
         
-        if confidence >= thresholds["auto_accept"]:
-            result["status"] = "Accepted"
-        elif confidence >= thresholds["verification"]:
-            result["status"] = "Review"
-        else:
-            # Decide action below verification threshold (e.g., flag as low confidence or reject)
-            # For now, just mark as review needed
-            result["status"] = "Review (Low Confidence)"
-            # Optionally add a specific flag for rejection threshold if needed
-            # if confidence < thresholds["rejection"]:
-            #     result["status"] = "Rejected (Very Low Confidence)"
-        
-        updated_results[file_id] = result
-        
-    return updated_results
-
-def display_confidence_visualization(confidence_data: Dict[str, float]):
+    Returns:
+        dict: Results with threshold flags
     """
-    Display a more detailed confidence breakdown using bars.
-    """
-    overall = confidence_data.get("overall", 0.0)
-    ai_factor = confidence_data.get("ai_confidence_factor", 0.0)
-    feature_factor = confidence_data.get("feature_factor", 0.0)
-    reasoning_factor = confidence_data.get("reasoning_factor", 0.0)
-    
-    # Determine overall color
-    if overall >= 0.8:
-        overall_color = "#28a745" # Green
-    elif overall >= 0.6:
-        overall_color = "#ffc107" # Yellow
-    else:
-        overall_color = "#dc3545" # Red
-        
-    st.markdown(f"**Overall Confidence:** <span style='color: {overall_color}; font-weight: bold;'>{overall:.2f}</span>", unsafe_allow_html=True)
-    
-    # Create data for Altair chart
-    data = pd.DataFrame({
-        'Factor': ['AI Confidence', 'Document Features', 'Reasoning Quality'],
-        'Score': [ai_factor, feature_factor, reasoning_factor]
+    # Get thresholds from session state
+    thresholds = st.session_state.get("confidence_thresholds", {
+        "auto_accept": 0.85,
+        "verification": 0.6,
+        "rejection": 0.4
     })
     
-    # Create Altair bar chart
-    chart = alt.Chart(data).mark_bar().encode(
-        x=alt.X("Score:Q", scale=alt.Scale(domain=[0, 1])), # Set scale domain 0-1
-        y=alt.Y("Factor:N", sort="-x"), # Sort bars by score descending
-        tooltip=['Factor', alt.Tooltip('Score', format=".2f")]
-    ).properties(
-        title='Confidence Factors'
+    # Apply thresholds to each result
+    for file_id, result in results.items():
+        # Use calibrated confidence if available, otherwise use original confidence
+        confidence = result.get("calibrated_confidence", result.get("confidence", 0.0))
+        
+        # Set threshold flags
+        result["auto_accept"] = confidence >= thresholds["auto_accept"]
+        result["needs_verification"] = confidence < thresholds["verification"]
+        result["rejected"] = confidence < thresholds["rejection"]
+        
+        # Set status based on thresholds
+        if result["auto_accept"]:
+            result["status"] = "Accepted"
+        elif result["rejected"]:
+            result["status"] = "Rejected"
+        elif result["needs_verification"]:
+            result["status"] = "Needs Verification"
+        else:
+            result["status"] = "Review"
+    
+    return results
+
+def collect_user_feedback(file_id, result):
+    """
+    Collect user feedback on categorization results
+    
+    Args:
+        file_id: The file ID
+        result: The categorization result
+    """
+    # Initialize feedback in session state if not exists
+    if "categorization_feedback" not in st.session_state:
+        st.session_state.categorization_feedback = {}
+    
+    # Get document types
+    document_types = [
+        "Sales Contract",
+        "Invoices",
+        "Tax",
+        "Financial Report",
+        "Employment Contract",
+        "PII",
+        "Other"
+    ]
+    
+    # Create feedback form
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Correct category selection
+        correct_category = st.selectbox(
+            "Correct Category",
+            options=document_types,
+            index=document_types.index(result["document_type"]) if result["document_type"] in document_types else 0,
+            key=f"feedback_category_{file_id}"
+        )
+    
+    with col2:
+        # Confidence rating
+        confidence_rating = st.select_slider(
+            "How confident are you in this categorization?",
+            options=["Not at all", "Slightly", "Moderately", "Very", "Extremely"],
+            value="Moderately",
+            key=f"feedback_confidence_{file_id}"
+        )
+    
+    # Additional feedback
+    feedback_text = st.text_area(
+        "Additional Feedback",
+        key=f"feedback_text_{file_id}"
     )
     
-    st.altair_chart(chart, use_container_width=True)
+    # Submit button
+    if st.button("Submit Feedback", key=f"submit_feedback_{file_id}"):
+        # Convert confidence rating to numeric value
+        confidence_values = {
+            "Not at all": 0.1,
+            "Slightly": 0.3,
+            "Moderately": 0.5,
+            "Very": 0.8,
+            "Extremely": 1.0
+        }
+        
+        numeric_confidence = confidence_values.get(confidence_rating, 0.5)
+        
+        # Store feedback in session state
+        st.session_state.categorization_feedback[file_id] = {
+            "file_id": file_id,
+            "file_name": result["file_name"],
+            "original_category": result["document_type"],
+            "corrected_category": correct_category,
+            "original_confidence": result.get("confidence", 0.0),
+            "user_confidence": numeric_confidence,
+            "feedback_text": feedback_text,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+        
+        # Update the result with user feedback
+        st.session_state.document_categorization["results"][file_id]["document_type"] = correct_category
+        st.session_state.document_categorization["results"][file_id]["confidence"] = numeric_confidence
+        st.session_state.document_categorization["results"][file_id]["calibrated_confidence"] = numeric_confidence
+        st.session_state.document_categorization["results"][file_id]["user_feedback"] = True
+        
+        st.success("Feedback submitted successfully!")
+        
+        # Trigger recalibration of confidence model
+        calibrate_confidence_model()
+        
+        return True
+    
+    return False
 
-def get_confidence_explanation(confidence_data: Dict[str, float], category: str) -> Dict[str, str]:
+def save_categorization_feedback(file_id, original_category, corrected_category):
     """
-    Generate human-readable explanations for the confidence score.
+    Save user feedback on categorization
     """
-    overall = confidence_data.get("overall", 0.0)
-    ai_factor = confidence_data.get("ai_confidence_factor", 0.0)
-    feature_factor = confidence_data.get("feature_factor", 0.0)
-    reasoning_factor = confidence_data.get("reasoning_factor", 0.0)
+    if "categorization_feedback" not in st.session_state:
+        st.session_state.categorization_feedback = {}
     
-    explanation = f"The overall confidence score of {overall:.2f} for category '{category}' is based on several factors:"
+    # Get file info
+    file_info = st.session_state.document_categorization["results"].get(file_id, {})
     
-    # AI Confidence Explanation
-    if ai_factor >= 0.8:
-        explanation += f"\n- The AI model reported high confidence ({ai_factor:.2f}) in its initial assessment."
-    elif ai_factor >= 0.6:
-        explanation += f"\n- The AI model reported medium confidence ({ai_factor:.2f})."
-    else:
-        explanation += f"\n- The AI model reported low confidence ({ai_factor:.2f}), suggesting some uncertainty."
+    # Save feedback
+    st.session_state.categorization_feedback[file_id] = {
+        "file_id": file_id,
+        "file_name": file_info.get("file_name", "Unknown"),
+        "original_category": original_category,
+        "corrected_category": corrected_category,
+        "original_confidence": file_info.get("confidence", 0.0),
+        "user_confidence": 1.0,  # Manual override has maximum confidence
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+    
+    # Log feedback
+    logger.info(f"Categorization feedback saved for {file_id}: {original_category} -> {corrected_category}")
+    
+    # Trigger confidence calibration
+    calibrate_confidence_model()
+
+def calibrate_confidence_model():
+    """
+    Calibrate confidence model based on user feedback
+    """
+    # Check if we have enough feedback for calibration
+    if "categorization_feedback" not in st.session_state:
+        return
+    
+    feedback = list(st.session_state.categorization_feedback.values())
+    
+    if len(feedback) < 3:  # Need at least 3 feedback items for meaningful calibration
+        return
+    
+    # Calculate calibration factors
+    category_confidence_adjustments = {}
+    
+    # Group feedback by original category
+    by_category = {}
+    for item in feedback:
+        category = item["original_category"]
+        if category not in by_category:
+            by_category[category] = []
+        by_category[category].append(item)
+    
+    # Calculate adjustment factors for each category
+    for category, items in by_category.items():
+        if len(items) < 2:  # Need at least 2 items per category for adjustment
+            continue
         
-    # Feature Factor Explanation
-    if feature_factor >= 0.7:
-        explanation += f"\n- Document features (like file type, size) strongly align ({feature_factor:.2f}) with typical '{category}' documents."
-    elif feature_factor >= 0.5:
-        explanation += f"\n- Document features moderately align ({feature_factor:.2f}) with '{category}' documents."
-    else:
-        explanation += f"\n- Document features show low alignment ({feature_factor:.2f}) with typical '{category}' documents."
+        # Calculate average confidence adjustment
+        avg_original = sum(item["original_confidence"] for item in items) / len(items)
+        avg_user = sum(item["user_confidence"] for item in items) / len(items)
         
-    # Reasoning Quality Explanation
-    if reasoning_factor >= 0.7:
-        explanation += f"\n- The AI's reasoning was detailed and specific ({reasoning_factor:.2f})."
-    elif reasoning_factor >= 0.5:
-        explanation += f"\n- The AI's reasoning was moderately detailed ({reasoning_factor:.2f})."
-    else:
-        explanation += f"\n- The AI's reasoning lacked detail or specificity ({reasoning_factor:.2f})."
+        # Calculate adjustment factor (multiplicative)
+        if avg_original > 0:
+            adjustment = avg_user / avg_original
+        else:
+            adjustment = 1.0
         
-    return {"overall": explanation}
+        # Store adjustment factor
+        category_confidence_adjustments[category] = adjustment
+    
+    # Store calibration factors in session state
+    st.session_state.confidence_calibration = {
+        "category_adjustments": category_confidence_adjustments,
+        "last_updated": datetime.datetime.now().isoformat(),
+        "feedback_count": len(feedback)
+    }
+    
+    logger.info(f"Confidence calibration updated: {st.session_state.confidence_calibration}")
+
+def apply_confidence_calibration(category, confidence):
+    """
+    Apply confidence calibration to a confidence score
+    
+    Args:
+        category: Document category
+        confidence: Original confidence score
+        
+    Returns:
+        float: Calibrated confidence score
+    """
+    # Check if we have calibration data
+    if "confidence_calibration" not in st.session_state:
+        return confidence
+    
+    calibration = st.session_state.confidence_calibration
+    
+    # Get category adjustment factor
+    adjustment = calibration.get("category_adjustments", {}).get(category, 1.0)
+    
+    # Apply adjustment (with limits to prevent extreme values)
+    calibrated = confidence * adjustment
+    
+    # Ensure confidence is between 0 and 1
+    calibrated = max(0.0, min(1.0, calibrated))
+    
+    return calibrated
 
 def validate_confidence_with_examples():
     """
-    Provide examples and allow testing of confidence calculation logic.
+    Validate confidence scores against known examples
     """
-    st.write("Test the multi-factor confidence calculation with example inputs:")
+    # Initialize validation examples if not in session state
+    if "validation_examples" not in st.session_state:
+        st.session_state.validation_examples = {}
     
-    # Example inputs
-    example_ai_confidence = st.slider("Example AI Confidence", 0.0, 1.0, 0.75, 0.05)
-    example_file_ext = st.selectbox("Example File Extension", ["pdf", "docx", "xlsx", "jpg", "txt", ""])
-    example_reasoning = st.text_area("Example AI Reasoning", "The document contains tables, financial figures, and mentions 'Q3 results'.")
-    example_category = st.selectbox("Example Category", [dtype['name'] for dtype in st.session_state.document_types])
+    # Add example button
+    if st.button("Add Validation Example"):
+        # Create a unique key for the new example
+        example_key = f"example_{len(st.session_state.validation_examples) + 1}"
+        
+        # Add the example to session state
+        st.session_state.validation_examples[example_key] = {
+            "file_id": "",
+            "file_name": "",
+            "actual_category": "",
+            "validated": False
+        }
     
-    # Simulate feature extraction
-    example_features = {
-        "file_size_kb": 500,
-        "file_extension": example_file_ext,
-        "keyword_match_score": 0.6 # Placeholder
-    }
+    # Display validation examples
+    for example_key, example in list(st.session_state.validation_examples.items()):
+        with st.container():
+            st.write(f"**Validation Example: {example_key}**")
+            
+            col1, col2, col3 = st.columns([2, 2, 1])
+            
+            with col1:
+                # File selection
+                selected_files = st.session_state.get("selected_files", [])
+                file_options = [{"label": f["name"], "value": f["id"]} for f in selected_files]
+                
+                selected_file = st.selectbox(
+                    "Select File",
+                    options=[{"label": "Select a file...", "value": ""}] + file_options,
+                    format_func=lambda x: x["label"],
+                    key=f"file_select_{example_key}"
+                )
+                
+                if selected_file and selected_file["value"]:
+                    example["file_id"] = selected_file["value"]
+                    example["file_name"] = selected_file["label"]
+            
+            with col2:
+                # Category selection
+                document_types = [
+                    "Sales Contract",
+                    "Invoices",
+                    "Tax",
+                    "Financial Report",
+                    "Employment Contract",
+                    "PII",
+                    "Other"
+                ]
+                
+                example["actual_category"] = st.selectbox(
+                    "Actual Category",
+                    options=[""] + document_types,
+                    key=f"category_select_{example_key}"
+                )
+            
+            with col3:
+                # Validation button
+                validate_button = st.button("Validate", key=f"validate_button_{example_key}")
+                delete_button = st.button("Delete", key=f"delete_button_{example_key}")
+                
+                if validate_button and example["file_id"] and example["actual_category"]:
+                    # Run categorization on the file
+                    result = categorize_document(example["file_id"])
+                    
+                    # Store validation result
+                    example["predicted_category"] = result["document_type"]
+                    example["confidence"] = result["confidence"]
+                    example["reasoning"] = result["reasoning"]
+                    example["validated"] = True
+                    
+                    # Calculate multi-factor confidence
+                    document_features = extract_document_features(example["file_id"])
+                    document_types = [
+                        "Sales Contract",
+                        "Invoices",
+                        "Tax",
+                        "Financial Report",
+                        "Employment Contract",
+                        "PII",
+                        "Other"
+                    ]
+                    example["multi_factor_confidence"] = calculate_multi_factor_confidence(
+                        result["confidence"],
+                        document_features,
+                        result["document_type"],
+                        result["reasoning"],
+                        document_types
+                    )
+                
+                if delete_button:
+                    # Remove the example from session state
+                    del st.session_state.validation_examples[example_key]
+                    st.rerun()
+            
+            # Display validation results if validated
+            if example.get("validated"):
+                correct = example["actual_category"] == example["predicted_category"]
+                
+                if correct:
+                    st.success(f"Correctly categorized as '{example['predicted_category']}' with confidence {example['confidence']:.2f}")
+                else:
+                    st.error(f"Incorrectly categorized as '{example['predicted_category']}' (should be '{example['actual_category']}') with confidence {example['confidence']:.2f}")
+                
+                # Display confidence visualization
+                if "multi_factor_confidence" in example:
+                    display_confidence_visualization(example["multi_factor_confidence"])
+                
+                # Display reasoning
+                with st.expander("Reasoning", expanded=False):
+                    st.write(example.get("reasoning", ""))
     
-    # Calculate confidence
-    calculated_confidence = calculate_multi_factor_confidence(
-        example_ai_confidence,
-        example_features,
-        example_category,
-        example_reasoning,
-        [dtype['name'] for dtype in st.session_state.document_types]
-    )
+    # Display validation summary if we have validated examples
+    validated_examples = [e for e in st.session_state.validation_examples.values() if e.get("validated")]
     
-    # Display results
-    st.write("**Calculated Multi-Factor Confidence:**")
-    display_confidence_visualization(calculated_confidence)
-    explanation = get_confidence_explanation(calculated_confidence, example_category)
-    st.info(explanation["overall"])
+    if validated_examples:
+        st.subheader("Validation Summary")
+        
+        # Calculate statistics
+        total = len(validated_examples)
+        correct = sum(1 for e in validated_examples if e["actual_category"] == e["predicted_category"])
+        accuracy = correct / total if total > 0 else 0
+        
+        # Group by confidence ranges
+        high_conf = [e for e in validated_examples if e.get("confidence", 0) >= 0.8]
+        med_conf = [e for e in validated_examples if 0.6 <= e.get("confidence", 0) < 0.8]
+        low_conf = [e for e in validated_examples if e.get("confidence", 0) < 0.6]
+        
+        high_correct = sum(1 for e in high_conf if e["actual_category"] == e["predicted_category"])
+        med_correct = sum(1 for e in med_conf if e["actual_category"] == e["predicted_category"])
+        low_correct = sum(1 for e in low_conf if e["actual_category"] == e["predicted_category"])
+        
+        high_accuracy = high_correct / len(high_conf) if high_conf else 0
+        med_accuracy = med_correct / len(med_conf) if med_conf else 0
+        low_accuracy = low_correct / len(low_conf) if low_conf else 0
+        
+        # Display statistics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Overall Accuracy", f"{accuracy:.0%}")
+        
+        with col2:
+            st.metric("High Confidence Accuracy", f"{high_accuracy:.0%}")
+        
+        with col3:
+            st.metric("Medium Confidence Accuracy", f"{med_accuracy:.0%}")
+        
+        with col4:
+            st.metric("Low Confidence Accuracy", f"{low_accuracy:.0%}")
 
-def save_categorization_feedback(file_id: str, original_category: str, corrected_category: str):
+def combine_categorization_results(results):
     """
-    Save user feedback on categorization for future calibration.
-    Placeholder function - needs persistent storage.
-    """
-    feedback_entry = {
-        "file_id": file_id,
-        "original_category": original_category,
-        "corrected_category": corrected_category,
-        "timestamp": datetime.datetime.now().isoformat()
-    }
-    logger.info(f"Saving feedback: {feedback_entry}")
-    # Placeholder: Append to a file or database
-    # with open("categorization_feedback.jsonl", "a") as f:
-    #     f.write(json.dumps(feedback_entry) + "\n")
-    st.toast("Feedback saved for improving future categorizations.")
-
-def combine_categorization_results(results: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Combine results from multiple models using weighted voting or averaging.
-    Placeholder: Simple majority vote for now.
+    Combine results from multiple models using weighted voting
+    
+    Args:
+        results: List of categorization results from different models
+        
+    Returns:
+        dict: Combined categorization result
     """
     if not results:
-        return {"document_type": "Other", "confidence": 0.0, "reasoning": "No results to combine"}
-
-    votes = {}
-    total_confidence = 0
-    combined_reasoning = "Combined Reasoning:\n"
-
+        return {
+            "document_type": "Other",
+            "confidence": 0.0,
+            "reasoning": "No results to combine"
+        }
+    
+    if len(results) == 1:
+        return results[0]
+    
+    # Count votes for each category, weighted by confidence
+    category_votes = {}
+    all_reasonings = []
+    
     for result in results:
-        category = result.get("document_type", "Other")
-        confidence = result.get("confidence", 0.0)
+        category = result["document_type"]
+        confidence = result["confidence"]
         reasoning = result.get("reasoning", "")
         
-        votes[category] = votes.get(category, 0) + 1 # Simple count for majority
-        total_confidence += confidence # Simple sum for averaging later
-        combined_reasoning += f"- Model Result: {category} (Conf: {confidence:.2f})\n  Reasoning: {reasoning}\n"
-
-    # Determine winning category by majority vote
-    if votes:
-        winning_category = max(votes, key=votes.get)
-        # Calculate average confidence for the winning category (or overall average)
-        avg_confidence = total_confidence / len(results) if results else 0.0
-    else:
+        # Add weighted vote
+        if category not in category_votes:
+            category_votes[category] = 0
+        
+        category_votes[category] += confidence
+        all_reasonings.append(f"Model vote: {category} (confidence: {confidence:.2f})\nReasoning: {reasoning}")
+    
+    # Find category with highest votes
+    if not category_votes:
         winning_category = "Other"
-        avg_confidence = 0.0
-
+        winning_votes = 0
+    else:
+        winning_category = max(category_votes.items(), key=lambda x: x[1])[0]
+        winning_votes = category_votes[winning_category]
+    
+    # Calculate consensus confidence
+    total_possible_votes = len(results)  # If all models voted with 100% confidence
+    consensus_confidence = winning_votes / total_possible_votes
+    
+    # Create combined reasoning
+    combined_reasoning = f"Consensus category: {winning_category} with {consensus_confidence:.2f} confidence.\n\n"
+    combined_reasoning += "\n\n".join(all_reasonings)
+    
     return {
         "document_type": winning_category,
-        "confidence": avg_confidence, # Use average confidence
+        "confidence": consensus_confidence,
         "reasoning": combined_reasoning
     }
 
-# --- Helper functions (like get_document_preview_url) would go here ---
-# Placeholder for get_document_preview_url
-def get_document_preview_url(file_id: str) -> Optional[str]:
-    """Placeholder: Get a preview URL for the document."""
-    # In a real scenario, this might involve generating a temporary preview link
-    # or using a service that provides previews.
-    logger.info(f"Preview requested for file {file_id}, but feature is not implemented.")
-    return None
-
-# Placeholder for collect_user_feedback
-def collect_user_feedback(file_id: str, result: Dict):
-    """Placeholder: UI elements for collecting detailed user feedback."""
-    st.write("Feedback collection UI not implemented.")
-
-# Placeholder for confidence calibration loading
-def load_calibration_data() -> Dict:
-     """Placeholder: Load calibration data from storage."""
-     return {}
-
+def get_document_preview_url(file_id, page=1):
+    """
+    Get document preview URL using Box API
+    
+    Args:
+        file_id: Box file ID
+        page: Page number to preview
+        
+    Returns:
+        str: Preview URL or None if not available
+    """
+    try:
+        client = st.session_state.client
+        
+        # Get thumbnail URL for the file
+        preview_url = client.file(file_id).get_thumbnail(
+            extension='png',
+            min_width=400,
+            min_height=400
+        )
+        
+        return preview_url
+    except Exception as e:
+        logger.warning(f"Error getting document preview: {str(e)}")
+        return None
