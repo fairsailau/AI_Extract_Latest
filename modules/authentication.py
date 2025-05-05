@@ -44,7 +44,7 @@ def check_secrets_available(required_sections):
                     # if not key_found: continue # Already added to missing
 
     if missing:
-        st.error(f"Missing required secrets: {\', \'.join(missing)}. Please configure them in Streamlit Cloud App settings -> Secrets.")
+        st.error(f"Missing required secrets: {', '.join(missing)}. Please configure them in Streamlit Cloud App settings -> Secrets.")
         return False, missing
     return True, []
 
