@@ -275,18 +275,21 @@ def metadata_config():
     # AI model selection
     st.subheader("AI Model Selection")
 
-    # Updated list of models with descriptions
-    # Sourced from https://developer.box.com/guides/box-ai/ai-models/ (May 5, 2025)
-    ai_models_with_desc = {
+    # Updated list of models with descriptions - FILTERED FOR /ai/extract_structured
+    # Based on API error response (May 5, 2025) and Box Docs
+    # Allowed values from error: ["azure__openai__gpt_4o_mini", "azure__openai__gpt_4_1", "azure__openai__gpt_4_1_mini", "google__gemini_1_5_pro_001", "google__gemini_1_5_flash_001", "google__gemini_2_0_flash_001", "google__gemini_2_0_flash_lite_preview", "aws__claude_3_haiku", "aws__claude_3_sonnet", "aws__claude_3_5_sonnet", "aws__claude_3_7_sonnet", "aws__titan_text_lite", "ibm__llama_3_2_90b_vision_instruct", "ibm__llama_4_scout"]
+    # Note: ibm__llama_3_2_90b_vision_instruct was not in original docs list, adding based on error.
+    # Note: google__gemini_2_0_flash_lite_preview is listed as default in docs, keeping.
+    all_models_with_desc = {
         "google__gemini_2_0_flash_lite_preview": "Google Gemini 2.0 Flash Lite: Lightweight multimodal model (Default for Box AI Extract) (Preview)",
         "azure__openai__gpt_4o_mini": "Azure OpenAI GPT-4o Mini: Lightweight multimodal model",
-        "azure__openai__gpt_4o": "Azure OpenAI GPT-4o: Highly efficient multimodal model for complex tasks",
+        "azure__openai__gpt_4o": "Azure OpenAI GPT-4o: Highly efficient multimodal model for complex tasks", # Not in allowedValues
         "azure__openai__gpt_4_1_mini": "Azure OpenAI GPT-4.1 Mini: Lightweight multimodal model (Default for some Box AI features)",
         "azure__openai__gpt_4_1": "Azure OpenAI GPT-4.1: Highly efficient multimodal model for complex tasks",
-        "azure__openai__gpt_o3": "Azure OpenAI GPT o3: Highly efficient multimodal model for complex tasks", # Name as per docs
-        "azure__openai__gpt_o4-mini": "Azure OpenAI GPT o4-mini: Highly efficient multimodal model for complex tasks", # Name as per docs
-        "google__gemini_2_5_pro_preview": "Google Gemini 2.5 Pro: Optimal for high-volume, high-frequency tasks (Preview)",
-        "google__gemini_2_5_flash_preview": "Google Gemini 2.5 Flash: Optimal for high-volume, high-frequency tasks (Preview)",
+        "azure__openai__gpt_o3": "Azure OpenAI GPT o3: Highly efficient multimodal model for complex tasks", # Not in allowedValues
+        "azure__openai__gpt_o4-mini": "Azure OpenAI GPT o4-mini: Highly efficient multimodal model for complex tasks", # Not in allowedValues
+        "google__gemini_2_5_pro_preview": "Google Gemini 2.5 Pro: Optimal for high-volume, high-frequency tasks (Preview)", # Not in allowedValues
+        "google__gemini_2_5_flash_preview": "Google Gemini 2.5 Flash: Optimal for high-volume, high-frequency tasks (Preview)", # Not in allowedValues
         "google__gemini_2_0_flash_001": "Google Gemini 2.0 Flash: Optimal for high-volume, high-frequency tasks",
         "google__gemini_1_5_flash_001": "Google Gemini 1.5 Flash: High volume tasks & latency-sensitive applications",
         "google__gemini_1_5_pro_001": "Google Gemini 1.5 Pro: Foundation model for various multimodal tasks",
@@ -295,14 +298,33 @@ def metadata_config():
         "aws__claude_3_5_sonnet": "AWS Claude 3.5 Sonnet: Enhanced language understanding and generation",
         "aws__claude_3_7_sonnet": "AWS Claude 3.7 Sonnet: Enhanced language understanding and generation",
         "aws__titan_text_lite": "AWS Titan Text Lite: Advanced language processing, extensive contexts",
-        "ibm__llama_3_2_instruct": "IBM Llama 3.2 Instruct: Instruction-tuned text model for dialogue, retrieval, summarization",
+        "ibm__llama_3_2_instruct": "IBM Llama 3.2 Instruct: Instruction-tuned text model for dialogue, retrieval, summarization", # Renamed in error log?
+        "ibm__llama_3_2_90b_vision_instruct": "IBM Llama 3.2 90B Vision Instruct: Instruction-tuned vision model (From Error Log)", # Added from error log
         "ibm__llama_4_scout": "IBM Llama 4 Scout: Natively multimodal model for text and multimodal experiences",
-        "xai__grok_3_beta": "xAI Grok 3: Excels at data extraction, coding, summarization (Beta)",
-        "xai__grok_3_mini_beta": "xAI Grok 3 Mini: Lightweight model for logic-based tasks (Beta)"
-        # Note: azure__openai__text_embedding_ada_002 is for embeddings, not extraction.
+        "xai__grok_3_beta": "xAI Grok 3: Excels at data extraction, coding, summarization (Beta)", # Not in allowedValues
+        "xai__grok_3_mini_beta": "xAI Grok 3 Mini: Lightweight model for logic-based tasks (Beta)" # Not in allowedValues
     }
 
-    # Get the list of model names (keys)
+    # Filtered list based on API error response for /ai/extract_structured
+    allowed_model_names = [
+        "azure__openai__gpt_4o_mini", "azure__openai__gpt_4_1", "azure__openai__gpt_4_1_mini",
+        "google__gemini_1_5_pro_001", "google__gemini_1_5_flash_001", "google__gemini_2_0_flash_001",
+        "google__gemini_2_0_flash_lite_preview", "aws__claude_3_haiku", "aws__claude_3_sonnet",
+        "aws__claude_3_5_sonnet", "aws__claude_3_7_sonnet", "aws__titan_text_lite",
+        "ibm__llama_3_2_90b_vision_instruct", "ibm__llama_4_scout"
+    ]
+
+    # Create the filtered dictionary for the dropdown
+    ai_models_with_desc = {name: all_models_with_desc.get(name, f"{name} (Description not found)")
+                           for name in allowed_model_names if name in all_models_with_desc}
+
+    # Add any models from allowed list that might have been missed in the initial dict
+    for name in allowed_model_names:
+        if name not in ai_models_with_desc:
+             ai_models_with_desc[name] = f"{name} (Description not found)"
+             logger.warning(f"Model 	{name}	 from allowed list was missing description, added placeholder.")
+
+    # Get the list of model names (keys) from the filtered list
     ai_model_names = list(ai_models_with_desc.keys())
 
     # Get the list of descriptions (values) to display in the dropdown
@@ -310,17 +332,23 @@ def metadata_config():
 
     # Find the index of the currently selected model's description
     current_model_name = st.session_state.metadata_config.get("ai_model", ai_model_names[0]) # Default to first if not set
+
+    # Ensure the current model is actually in the allowed list
+    if current_model_name not in ai_model_names:
+        logger.warning(f"Previously selected model 	{current_model_name}	 is not allowed for extraction. Defaulting to 	{ai_model_names[0]}	.")
+        current_model_name = ai_model_names[0]
+        st.session_state.metadata_config["ai_model"] = current_model_name # Update session state
+
     try:
         # Find the description corresponding to the current model name
         current_model_desc = ai_models_with_desc.get(current_model_name, ai_model_options[0])
         selected_index = ai_model_options.index(current_model_desc)
     except (ValueError, KeyError):
-        # Default to first option if current model not found or description missing
-        # This might happen if the previously saved model is no longer in the list
-        logger.warning(f"Previously selected model 	{current_model_name}	 not found in the current list. Defaulting to the first model.")
+        # Fallback if current model description not found (should be rare after filtering)
+        logger.error(f"Error finding index for model 	{current_model_name}	. Defaulting to first model.")
         selected_index = 0
         current_model_name = ai_model_names[selected_index]
-        st.session_state.metadata_config["ai_model"] = current_model_name # Update session state to valid default
+        st.session_state.metadata_config["ai_model"] = current_model_name # Update session state
 
     # Use descriptions in the selectbox options
     selected_model_desc = st.selectbox(
@@ -328,7 +356,7 @@ def metadata_config():
         options=ai_model_options,
         index=selected_index,
         key="ai_model_selectbox",
-        help="Choose the AI model to use for metadata extraction. (Preview) or (Beta) indicates models not fully tested at scale."
+        help="Choose the AI model for metadata extraction. Only models supported by the extraction endpoint are listed."
     )
 
     # Find the model name (key) corresponding to the selected description
