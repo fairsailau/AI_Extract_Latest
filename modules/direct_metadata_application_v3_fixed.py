@@ -9,7 +9,7 @@ import streamlit as st
 import logging
 import json
 from boxsdk import Client, exception
-from boxsdk.object.metadata_template import MetadataUpdate # Import MetadataUpdate
+from boxsdk.object.metadata import MetadataUpdate # Import MetadataUpdate
 from dateutil import parser
 from datetime import timezone
 
