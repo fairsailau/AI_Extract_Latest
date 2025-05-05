@@ -1,3 +1,4 @@
+# modules/metadata_config.py
 import streamlit as st
 import logging
 import json
@@ -5,7 +6,7 @@ from typing import Dict, Any, List, Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
-                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+                   format=\'%(asctime)s - %(name)s - %(levelname)s - %(message)s\')
 logger = logging.getLogger(__name__)
 
 def metadata_config():
@@ -63,8 +64,22 @@ def metadata_config():
     st.subheader("Extraction Method")
     
     # Ensure extraction_method is initialized in metadata_config
+    if "metadata_config" not in st.session_state:
+        st.session_state.metadata_config = {}
     if "extraction_method" not in st.session_state.metadata_config:
         st.session_state.metadata_config["extraction_method"] = "freeform"
+    if "freeform_prompt" not in st.session_state.metadata_config:
+        st.session_state.metadata_config["freeform_prompt"] = "Extract key metadata from this document including dates, names, amounts, and other important information."
+    if "template_id" not in st.session_state.metadata_config:
+        st.session_state.metadata_config["template_id"] = ""
+    if "use_template" not in st.session_state.metadata_config:
+        st.session_state.metadata_config["use_template"] = False
+    if "custom_fields" not in st.session_state.metadata_config:
+        st.session_state.metadata_config["custom_fields"] = []
+    if "ai_model" not in st.session_state.metadata_config:
+        st.session_state.metadata_config["ai_model"] = "google__gemini_2_0_flash_001" # Default model
+    if "batch_size" not in st.session_state.metadata_config:
+        st.session_state.metadata_config["batch_size"] = 5
         
     extraction_method = st.radio(
         "Select extraction method",
@@ -119,7 +134,7 @@ def metadata_config():
                     f"Prompt for {doc_type}",
                     value=current_prompt,
                     height=100,
-                    key=f"prompt_{doc_type.replace(' ', '_').lower()}",
+                    key=f"prompt_{doc_type.replace(\' \', \'_\').lower()}",
                     help=f"Customize the prompt for {doc_type} documents"
                 )
                 
@@ -174,7 +189,7 @@ def metadata_config():
                     f"Template for {doc_type}",
                     options=[option[1] for option in template_options],
                     index=selected_index,
-                    key=f"template_{doc_type.replace(' ', '_').lower()}",
+                    key=f"template_{doc_type.replace(\' \', \'_\').lower()}",
                     help=f"Select a metadata template for {doc_type} documents"
                 )
                 
@@ -190,12 +205,20 @@ def metadata_config():
         
         # General template selection (for all files)
         st.subheader("Default Template Selection")
-        st.info("This template will be used for files that don't have a document type or don't have a specific template mapping.")
+        st.info("This template will be used for files that don\'t have a document type or don\'t have a specific template mapping.")
         
+        # Find index of current default template
+        current_default_template_id = st.session_state.metadata_config.get("template_id", "")
+        default_selected_index = 0
+        for i, (template_id, _) in enumerate(template_options):
+            if template_id == current_default_template_id:
+                default_selected_index = i
+                break
+                
         selected_template_name = st.selectbox(
             "Select a default metadata template",
             options=[option[1] for option in template_options],
-            index=0,
+            index=default_selected_index, # Use the found index
             key="template_selectbox",
             help="Select a metadata template to use for structured extraction"
         )
@@ -216,13 +239,13 @@ def metadata_config():
             template = templates[selected_template_id]
             
             st.write("#### Template Details")
-            st.write(f"**Name:** {template['displayName']}")
-            st.write(f"**ID:** {template['id']}")
+            st.write(f"**Name:** {template[\'displayName\']}")
+            st.write(f"**ID:** {template[\'id\']}")
             
             # Display fields
             st.write("**Fields:**")
             for field in template["fields"]:
-                st.write(f"- {field['displayName']} ({field['type']})")
+                st.write(f"- {field[\'displayName\']} ({field[\'type\']})")
         
         # Custom fields if no template selected
         else:
@@ -266,7 +289,7 @@ def metadata_config():
             # Add new field button
             if st.button("Add Field", key="add_field_button"):
                 st.session_state.metadata_config["custom_fields"].append({
-                    "name": f"Field {len(st.session_state.metadata_config['custom_fields']) + 1}",
+                    "name": f"Field {len(st.session_state.metadata_config[\'custom_fields\']) + 1}",
                     "type": "string"
                 })
                 st.rerun()
@@ -274,9 +297,17 @@ def metadata_config():
     # AI model selection
     st.subheader("AI Model Selection")
     
+    # Updated list based on Box documentation (May 2025)
     ai_models = [
+        "azure__openai__gpt_4_1_mini",
+        "azure__openai__gpt_o3",
+        "azure__openai__gpt_o4-mini", # Note: This was in the doc, might be a typo for gpt_4o_mini?
+        "azure__openai__gpt_4_1",
         "azure__openai__gpt_4o_mini",
-        "azure__openai__gpt_4o_2024_05_13",
+        "azure__openai__gpt_4o",
+        # "azure__openai__text_embedding_ada_002", # Embedding model, not for extraction
+        "google__gemini_2_5_pro_preview",
+        "google__gemini_2_5_flash_preview",
         "google__gemini_2_0_flash_001",
         "google__gemini_2_0_flash_lite_preview",
         "google__gemini_1_5_flash_001",
@@ -285,15 +316,30 @@ def metadata_config():
         "aws__claude_3_sonnet",
         "aws__claude_3_5_sonnet",
         "aws__claude_3_7_sonnet",
-        "aws__titan_text_lite"
+        "aws__titan_text_lite",
+        "ibm__llama_3_2_instruct",
+        "ibm__llama_4_scout",
+        "xai__grok_3_beta",
+        "xai__grok_3_mini_beta"
     ]
     
+    # Get current model, default if not found in list
+    current_model = st.session_state.metadata_config.get("ai_model", "google__gemini_2_0_flash_001")
+    try:
+        current_index = ai_models.index(current_model)
+    except ValueError:
+        logger.warning(f"Current AI model 
+{current_model}
+ not found in the updated list. Defaulting selection.")
+        current_index = ai_models.index("google__gemini_2_0_flash_001") # Default to a known good one
+        st.session_state.metadata_config["ai_model"] = ai_models[current_index]
+        
     selected_model = st.selectbox(
         "Select AI Model",
         options=ai_models,
-        index=ai_models.index(st.session_state.metadata_config["ai_model"]) if st.session_state.metadata_config["ai_model"] in ai_models else 0,
+        index=current_index,
         key="ai_model_selectbox",
-        help="Choose the AI model to use for metadata extraction"
+        help="Choose the AI model to use for metadata extraction (ensure it\'s enabled for your enterprise)"
     )
     
     # Update AI model in session state
@@ -320,3 +366,4 @@ def metadata_config():
     if st.button("Continue to Process Files", key="continue_to_process_button", use_container_width=True):
         st.session_state.current_page = "Process Files"
         st.rerun()
+
