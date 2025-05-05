@@ -1,4 +1,3 @@
-# modules/metadata_config.py
 import streamlit as st
 import logging
 import json
@@ -6,12 +5,12 @@ from typing import Dict, Any, List, Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
-                   format=\'%(asctime)s - %(name)s - %(levelname)s - %(message)s\')
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 def metadata_config():
     """
-    Configure metadata extraction parameters with enhanced document type specific configurations
+    Configure metadata extraction parameters
     """
     st.title("Metadata Configuration")
     
@@ -64,22 +63,8 @@ def metadata_config():
     st.subheader("Extraction Method")
     
     # Ensure extraction_method is initialized in metadata_config
-    if "metadata_config" not in st.session_state:
-        st.session_state.metadata_config = {}
     if "extraction_method" not in st.session_state.metadata_config:
         st.session_state.metadata_config["extraction_method"] = "freeform"
-    if "freeform_prompt" not in st.session_state.metadata_config:
-        st.session_state.metadata_config["freeform_prompt"] = "Extract key metadata from this document including dates, names, amounts, and other important information."
-    if "template_id" not in st.session_state.metadata_config:
-        st.session_state.metadata_config["template_id"] = ""
-    if "use_template" not in st.session_state.metadata_config:
-        st.session_state.metadata_config["use_template"] = False
-    if "custom_fields" not in st.session_state.metadata_config:
-        st.session_state.metadata_config["custom_fields"] = []
-    if "ai_model" not in st.session_state.metadata_config:
-        st.session_state.metadata_config["ai_model"] = "google__gemini_2_0_flash_001" # Default model
-    if "batch_size" not in st.session_state.metadata_config:
-        st.session_state.metadata_config["batch_size"] = 5
         
     extraction_method = st.radio(
         "Select extraction method",
@@ -111,7 +96,7 @@ def metadata_config():
         # Document type specific prompts
         if has_categorization:
             st.subheader("Document Type Specific Prompts")
-            st.info("You can customize the freeform prompt for each document type. These prompts will be used when processing files of the corresponding document type.")
+            st.info("You can customize the freeform prompt for each document type.")
             
             # Get unique document types
             document_types = set()
@@ -134,7 +119,7 @@ def metadata_config():
                     f"Prompt for {doc_type}",
                     value=current_prompt,
                     height=100,
-                    key=f"prompt_{doc_type.replace(\' \', \'_\').lower()}",
+                    key=f"prompt_{doc_type.replace(' ', '_').lower()}",
                     help=f"Customize the prompt for {doc_type} documents"
                 )
                 
@@ -158,10 +143,13 @@ def metadata_config():
         for template_id, template in templates.items():
             template_options.append((template_id, template["displayName"]))
         
+        # Template selection
+        st.write("#### Select Metadata Template")
+        
         # Document type template mapping
         if has_categorization:
             st.subheader("Document Type Template Mapping")
-            st.info("You can map each document type to a specific metadata template. These mappings will be used when processing files of the corresponding document type.")
+            st.info("You can map each document type to a specific metadata template.")
             
             # Get unique document types
             document_types = set()
@@ -170,12 +158,13 @@ def metadata_config():
             
             # Initialize document type to template mapping if not exists
             if not hasattr(st.session_state, "document_type_to_template"):
-                st.session_state.document_type_to_template = {}
+                from modules.metadata_template_retrieval import initialize_template_state
+                initialize_template_state()
             
             # Display template selection for each document type
             for doc_type in document_types:
                 # Get current template for document type
-                current_template_id = st.session_state.document_type_to_template.get(doc_type, "")
+                current_template_id = st.session_state.document_type_to_template.get(doc_type)
                 
                 # Find index of current template in options
                 selected_index = 0
@@ -189,7 +178,7 @@ def metadata_config():
                     f"Template for {doc_type}",
                     options=[option[1] for option in template_options],
                     index=selected_index,
-                    key=f"template_{doc_type.replace(\' \', \'_\').lower()}",
+                    key=f"template_{doc_type.replace(' ', '_').lower()}",
                     help=f"Select a metadata template for {doc_type} documents"
                 )
                 
@@ -204,21 +193,10 @@ def metadata_config():
                 st.session_state.document_type_to_template[doc_type] = selected_template_id
         
         # General template selection (for all files)
-        st.subheader("Default Template Selection")
-        st.info("This template will be used for files that don\'t have a document type or don\'t have a specific template mapping.")
-        
-        # Find index of current default template
-        current_default_template_id = st.session_state.metadata_config.get("template_id", "")
-        default_selected_index = 0
-        for i, (template_id, _) in enumerate(template_options):
-            if template_id == current_default_template_id:
-                default_selected_index = i
-                break
-                
         selected_template_name = st.selectbox(
-            "Select a default metadata template",
+            "Select a metadata template",
             options=[option[1] for option in template_options],
-            index=default_selected_index, # Use the found index
+            index=0,
             key="template_selectbox",
             help="Select a metadata template to use for structured extraction"
         )
@@ -239,13 +217,13 @@ def metadata_config():
             template = templates[selected_template_id]
             
             st.write("#### Template Details")
-            st.write(f"**Name:** {template[\'displayName\']}")
-            st.write(f"**ID:** {template[\'id\']}")
+            st.write(f"**Name:** {template['displayName']}")
+            st.write(f"**ID:** {template['id']}")
             
             # Display fields
             st.write("**Fields:**")
             for field in template["fields"]:
-                st.write(f"- {field[\'displayName\']} ({field[\'type\']})")
+                st.write(f"- {field['displayName']} ({field['type']})")
         
         # Custom fields if no template selected
         else:
@@ -289,61 +267,79 @@ def metadata_config():
             # Add new field button
             if st.button("Add Field", key="add_field_button"):
                 st.session_state.metadata_config["custom_fields"].append({
-                    "name": f"Field {len(st.session_state.metadata_config[\'custom_fields\']) + 1}",
+                    "name": f"Field {len(st.session_state.metadata_config['custom_fields']) + 1}",
                     "type": "string"
                 })
                 st.rerun()
     
     # AI model selection
     st.subheader("AI Model Selection")
-    
-    # Updated list based on Box documentation (May 2025)
-    ai_models = [
-        "azure__openai__gpt_4_1_mini",
-        "azure__openai__gpt_o3",
-        "azure__openai__gpt_o4-mini", # Note: This was in the doc, might be a typo for gpt_4o_mini?
-        "azure__openai__gpt_4_1",
-        "azure__openai__gpt_4o_mini",
-        "azure__openai__gpt_4o",
-        # "azure__openai__text_embedding_ada_002", # Embedding model, not for extraction
-        "google__gemini_2_5_pro_preview",
-        "google__gemini_2_5_flash_preview",
-        "google__gemini_2_0_flash_001",
-        "google__gemini_2_0_flash_lite_preview",
-        "google__gemini_1_5_flash_001",
-        "google__gemini_1_5_pro_001",
-        "aws__claude_3_haiku",
-        "aws__claude_3_sonnet",
-        "aws__claude_3_5_sonnet",
-        "aws__claude_3_7_sonnet",
-        "aws__titan_text_lite",
-        "ibm__llama_3_2_instruct",
-        "ibm__llama_4_scout",
-        "xai__grok_3_beta",
-        "xai__grok_3_mini_beta"
-    ]
-    
-    # Get current model, default if not found in list
-    current_model = st.session_state.metadata_config.get("ai_model", "google__gemini_2_0_flash_001")
+
+    # Updated list of models with descriptions
+    # Sourced from https://developer.box.com/guides/box-ai/ai-models/ (May 5, 2025)
+    ai_models_with_desc = {
+        "google__gemini_2_0_flash_lite_preview": "Google Gemini 2.0 Flash Lite: Lightweight multimodal model (Default for Box AI Extract) (Preview)",
+        "azure__openai__gpt_4o_mini": "Azure OpenAI GPT-4o Mini: Lightweight multimodal model",
+        "azure__openai__gpt_4o": "Azure OpenAI GPT-4o: Highly efficient multimodal model for complex tasks",
+        "azure__openai__gpt_4_1_mini": "Azure OpenAI GPT-4.1 Mini: Lightweight multimodal model (Default for some Box AI features)",
+        "azure__openai__gpt_4_1": "Azure OpenAI GPT-4.1: Highly efficient multimodal model for complex tasks",
+        "azure__openai__gpt_o3": "Azure OpenAI GPT o3: Highly efficient multimodal model for complex tasks", # Name as per docs
+        "azure__openai__gpt_o4-mini": "Azure OpenAI GPT o4-mini: Highly efficient multimodal model for complex tasks", # Name as per docs
+        "google__gemini_2_5_pro_preview": "Google Gemini 2.5 Pro: Optimal for high-volume, high-frequency tasks (Preview)",
+        "google__gemini_2_5_flash_preview": "Google Gemini 2.5 Flash: Optimal for high-volume, high-frequency tasks (Preview)",
+        "google__gemini_2_0_flash_001": "Google Gemini 2.0 Flash: Optimal for high-volume, high-frequency tasks",
+        "google__gemini_1_5_flash_001": "Google Gemini 1.5 Flash: High volume tasks & latency-sensitive applications",
+        "google__gemini_1_5_pro_001": "Google Gemini 1.5 Pro: Foundation model for various multimodal tasks",
+        "aws__claude_3_haiku": "AWS Claude 3 Haiku: Tailored for various language tasks",
+        "aws__claude_3_sonnet": "AWS Claude 3 Sonnet: Advanced language tasks, comprehension & context handling",
+        "aws__claude_3_5_sonnet": "AWS Claude 3.5 Sonnet: Enhanced language understanding and generation",
+        "aws__claude_3_7_sonnet": "AWS Claude 3.7 Sonnet: Enhanced language understanding and generation",
+        "aws__titan_text_lite": "AWS Titan Text Lite: Advanced language processing, extensive contexts",
+        "ibm__llama_3_2_instruct": "IBM Llama 3.2 Instruct: Instruction-tuned text model for dialogue, retrieval, summarization",
+        "ibm__llama_4_scout": "IBM Llama 4 Scout: Natively multimodal model for text and multimodal experiences",
+        "xai__grok_3_beta": "xAI Grok 3: Excels at data extraction, coding, summarization (Beta)",
+        "xai__grok_3_mini_beta": "xAI Grok 3 Mini: Lightweight model for logic-based tasks (Beta)"
+        # Note: azure__openai__text_embedding_ada_002 is for embeddings, not extraction.
+    }
+
+    # Get the list of model names (keys)
+    ai_model_names = list(ai_models_with_desc.keys())
+
+    # Get the list of descriptions (values) to display in the dropdown
+    ai_model_options = list(ai_models_with_desc.values())
+
+    # Find the index of the currently selected model's description
+    current_model_name = st.session_state.metadata_config.get("ai_model", ai_model_names[0]) # Default to first if not set
     try:
-        current_index = ai_models.index(current_model)
-    except ValueError:
-        logger.warning(f"Current AI model 
-{current_model}
- not found in the updated list. Defaulting selection.")
-        current_index = ai_models.index("google__gemini_2_0_flash_001") # Default to a known good one
-        st.session_state.metadata_config["ai_model"] = ai_models[current_index]
-        
-    selected_model = st.selectbox(
+        # Find the description corresponding to the current model name
+        current_model_desc = ai_models_with_desc.get(current_model_name, ai_model_options[0])
+        selected_index = ai_model_options.index(current_model_desc)
+    except (ValueError, KeyError):
+        # Default to first option if current model not found or description missing
+        # This might happen if the previously saved model is no longer in the list
+        logger.warning(f"Previously selected model 	{current_model_name}	 not found in the current list. Defaulting to the first model.")
+        selected_index = 0
+        current_model_name = ai_model_names[selected_index]
+        st.session_state.metadata_config["ai_model"] = current_model_name # Update session state to valid default
+
+    # Use descriptions in the selectbox options
+    selected_model_desc = st.selectbox(
         "Select AI Model",
-        options=ai_models,
-        index=current_index,
+        options=ai_model_options,
+        index=selected_index,
         key="ai_model_selectbox",
-        help="Choose the AI model to use for metadata extraction (ensure it\'s enabled for your enterprise)"
+        help="Choose the AI model to use for metadata extraction. (Preview) or (Beta) indicates models not fully tested at scale."
     )
-    
-    # Update AI model in session state
-    st.session_state.metadata_config["ai_model"] = selected_model
+
+    # Find the model name (key) corresponding to the selected description
+    selected_model_name = ""
+    for name, desc in ai_models_with_desc.items():
+        if desc == selected_model_desc:
+            selected_model_name = name
+            break
+
+    # Update AI model name in session state
+    st.session_state.metadata_config["ai_model"] = selected_model_name
     
     # Batch processing configuration
     st.subheader("Batch Processing Configuration")
@@ -366,4 +362,3 @@ def metadata_config():
     if st.button("Continue to Process Files", key="continue_to_process_button", use_container_width=True):
         st.session_state.current_page = "Process Files"
         st.rerun()
-
