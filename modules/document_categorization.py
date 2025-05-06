@@ -882,8 +882,12 @@ def get_document_preview_url(file_id: str) -> Optional[str]:
         return None
 
 def combine_categorization_results(results: List[Dict[str, Any]], valid_categories: List[str]) -> Dict[str, Any]:
-    """Combine results from multiple models (Placeholder)"""
-    if not results: return {"document_type": "Other", "confidence": 0.0, "reasoning": "No consensus results"}
+    if not results:
+        return {
+            "document_type": "Other",
+            "confidence": 0.0,
+            "reasoning": "No consensus results"
+        }
     
     category_counts = {}
     category_confidences = {}
