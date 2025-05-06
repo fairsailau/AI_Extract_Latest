@@ -781,8 +781,10 @@ def display_confidence_visualization(confidence_data: dict, category: str, conta
                 st.progress(value)
             with col_value:
                 st.markdown(f"<div style=	padding-top: 8px;	>{value:.2f}</div>", unsafe_allow_html=True)
-            with col_help:
-                st.markdown(f"<div style=	padding-top: 8px;	><span title=	{explanation_text}	>&#9432;</span></div>", unsafe_allow_html=True) # Unicode circled i for info
+                with col_help:
+                    # Use st.tooltip for better compatibility
+                    with st.tooltip(explanation_text):
+                        st.markdown(f"<div style=	padding-top: 8px;	>&#9432;</div>", unsafe_allow_html=True) # Unicode circled i for info
         else:
             container.markdown(f"- **{factor_name}:** N/A")
 
