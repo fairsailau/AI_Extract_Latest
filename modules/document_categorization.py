@@ -791,7 +791,8 @@ def display_confidence_visualization(confidence_data: dict, category: str, conta
         logger.warning(f"[get_confidence_explanation] overall_confidence is not a number: {overall_confidence}. Defaulting to 0.0.")
         overall_confidence = 0.0
 
-    if overall_confidence >= 0.8: explanations["overall"] = f"The system is highly confident that the document is a {category}."
+    if overall_confidence >= 0.8: 
+            explanations["overall"] = f"The system is highly confident that the document is a {category}."
     elif overall_confidence >= 0.6: explanations["overall"] = f"The system has medium confidence that the document is a {category}. Manual review is recommended."
     else: explanations["overall"] = f"The system has low confidence that the document is a {category}. Manual review is strongly recommended."
 
