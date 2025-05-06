@@ -1,4 +1,4 @@
-# Copied from /home/ubuntu/document_categorization_fixed_v2.py with added logging
+# Copied from /home/ubuntu/document_categorization_fixed_v5.py with UI enhancements
 import streamlit as st
 import logging
 import json
@@ -210,9 +210,9 @@ def document_categorization():
                                 consensus_results = []
                                 model_progress = st.progress(0)
                                 model_status = st.empty()
-                                for i, model in enumerate(consensus_models):
-                                    model_status.text(f"Processing with {model}...")
-                                    result = categorize_document(file_id, model, document_types_with_desc)
+                                for i, model_name_iter in enumerate(consensus_models):
+                                    model_status.text(f"Processing with {model_name_iter}...")
+                                    result = categorize_document(file_id, model_name_iter, document_types_with_desc)
                                     consensus_results.append(result)
                                     model_progress.progress((i + 1) / len(consensus_models))
                                 model_progress.empty()
@@ -419,13 +419,13 @@ def display_categorization_results():
                 with col1_detail:
                     st.write(f"**Category:** {result["document_type"]}")
                     
-                    # ADDED LOGGING HERE
-                    logger.info(f"Debug Detailed View: File {file_id}. Checking 'multi_factor_confidence'. Key present: {'multi_factor_confidence' in result}. Value: {result.get('multi_factor_confidence')}")
+                    logger.info(f"Debug Detailed View: File {file_id}. Checking \tmulti_factor_confidence\t. Key present: {"multi_factor_confidence" in result}. Value: {result.get("multi_factor_confidence")}")
                     if "multi_factor_confidence" in result and result["multi_factor_confidence"]:
-                        logger.info(f"Debug Detailed View: File {file_id}. Rendering 'multi_factor_confidence' using display_confidence_visualization.")
-                        display_confidence_visualization(result["multi_factor_confidence"], container=st.expander("Confidence Breakdown", expanded=True))
+                        logger.info(f"Debug Detailed View: File {file_id}. Rendering \tmulti_factor_confidence\t using display_confidence_visualization.")
+                        with st.expander("Confidence Breakdown", expanded=True):
+                             display_confidence_visualization(result["multi_factor_confidence"], result["document_type"], container=st)
                     else: 
-                        logger.info(f"Debug Detailed View: File {file_id}. 'multi_factor_confidence' is MISSING or EMPTY. Falling back to simple confidence display.")
+                        logger.info(f"Debug Detailed View: File {file_id}. \tmulti_factor_confidence\t is MISSING or EMPTY. Falling back to simple confidence display.")
                         confidence = result.get("confidence", 0.0)
                         if confidence >= 0.8: level, color = "High", "#28a745"
                         elif confidence >= 0.6: level, color = "Medium", "#ffc107"
@@ -652,8 +652,8 @@ def parse_categorization_response(response_text: str, valid_categories: List[str
         if reasoning_match:
             reasoning = reasoning_match.group(1).strip()
         else:
-            logger.warning(f"Could not find 'Reasoning:' line in response: {{response_text[:500]}}")
-            lines = response_text.split('\n')
+            logger.warning(f"Could not find \tReasoning:\t line in response: {response_text[:500]}")
+            lines = response_text.split("\n")
             reasoning_lines = [line for line in lines if not line.lower().startswith("category:") and not line.lower().startswith("confidence:")]
             reasoning = "\n".join(reasoning_lines).strip()
             if not reasoning:
@@ -742,8 +742,8 @@ def apply_confidence_calibration(category: str, confidence: float) -> float:
     """Placeholder for confidence calibration"""
     return confidence
 
-def display_confidence_visualization(confidence_data: dict, container=None):
-    """Display a comprehensive confidence visualization with breakdown."""
+def display_confidence_visualization(confidence_data: dict, category: str, container=None):
+    """Display a comprehensive confidence visualization with breakdown, bars, and help icons."""
     if container is None: 
         container = st
     
@@ -765,11 +765,24 @@ def display_confidence_visualization(confidence_data: dict, container=None):
         "reasoning_quality": "Reasoning Quality",
         "document_features_match": "Document Features Match"
     }
+    
+    explanations = get_confidence_explanation(confidence_data, category)
 
     for factor_key, factor_name in factors_display.items():
         value = confidence_data.get(factor_key)
+        explanation_text = explanations.get("factors", {}).get(factor_key, "No explanation available.")
+        
         if value is not None:
-            container.markdown(f"- **{factor_name}:** {value:.2f}")
+            # Use columns for layout: Factor Name | Bar | Value | Help Icon
+            col_name, col_bar, col_value, col_help = container.columns([3, 4, 1, 1])
+            with col_name:
+                st.markdown(f"<div style=	padding-top: 8px;	>{factor_name}</div>", unsafe_allow_html=True)
+            with col_bar:
+                st.progress(value)
+            with col_value:
+                st.markdown(f"<div style=	padding-top: 8px;	>{value:.2f}</div>", unsafe_allow_html=True)
+            with col_help:
+                st.markdown(f"<div style=	padding-top: 8px;	><span title=	{explanation_text}	>&#9432;</span></div>", unsafe_allow_html=True) # Unicode circled i for info
         else:
             container.markdown(f"- **{factor_name}:** N/A")
 
@@ -782,16 +795,11 @@ def get_confidence_explanation(confidence_data: dict, category: str) -> dict:
     elif overall_confidence >= 0.6: explanations["overall"] = f"The system has medium confidence that the document is a \t{category}\t. Manual review is recommended."
     else: explanations["overall"] = f"The system has low confidence that the document is a \t{category}\t. Manual review is strongly recommended."
 
-    if "ai_reported" in confidence_data:
-        explanations["factors"]["ai_reported"] = f"The AI model initially reported a confidence of {confidence_data["ai_reported"]:.2f}."
-    if "response_quality" in confidence_data:
-        explanations["factors"]["response_quality"] = f"The quality of the AI response structure was assessed as {confidence_data["response_quality"]:.2f}. Good structure includes clear category, confidence, and reasoning."
-    if "category_specificity" in confidence_data:
-        explanations["factors"]["category_specificity"] = f"The specificity of the assigned category (\t{category}\t) contributed {confidence_data["category_specificity"]:.2f} to the score. Non-\tOther\t categories score higher."
-    if "reasoning_quality" in confidence_data:
-        explanations["factors"]["reasoning_quality"] = f"The AI\ts reasoning quality was rated {confidence_data["reasoning_quality"]:.2f}, based on length and presence of keywords like \tevidence\t."
-    if "document_features_match" in confidence_data:
-        explanations["factors"]["document_features_match"] = f"The match between document features (e.g., extension) and the category was {confidence_data["document_features_match"]:.2f} (this is a simplified factor)."
+    explanations["factors"]["ai_reported"] = f"The AI model initially reported a confidence of {confidence_data.get("ai_reported", 0.0):.2f}. This is the raw confidence score from the AI model before any adjustments."
+    explanations["factors"]["response_quality"] = f"The quality of the AI response structure was assessed as {confidence_data.get("response_quality", 0.0):.2f}. Good structure includes clear category, confidence, and reasoning. Poor structure or parsing errors lower this score."
+    explanations["factors"]["category_specificity"] = f"The specificity of the assigned category (\t{category}\t) contributed {confidence_data.get("category_specificity", 0.0):.2f} to the score. Specific, non-\tOther\t categories score higher, reflecting a more precise classification."
+    explanations["factors"]["reasoning_quality"] = f"The AI\ts reasoning quality was rated {confidence_data.get("reasoning_quality", 0.0):.2f}, based on the length and presence of keywords like \tevidence\t or \tfeature\t. More detailed and relevant reasoning increases this score."
+    explanations["factors"]["document_features_match"] = f"The match between document features (e.g., file extension, size) and the typical characteristics of the assigned category was {confidence_data.get("document_features_match", 0.0):.2f}. This is a simplified factor and may be expanded in future versions."
     
     return explanations
 
