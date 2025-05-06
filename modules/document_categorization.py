@@ -717,9 +717,9 @@ def display_categorization_results(valid_categories: List[str]): # Adapted for d
                 if multi_factor and "overall" in multi_factor:
                     st.write(f"**Overall Confidence:** {confidence:.2f}")
                     with st.expander("Confidence Details", expanded=False):
-                        st.write(f"- AI Confidence: {multi_factor.get(\'ai_confidence\', \'N/A\'):.2f}")
-                        st.write(f"- Feature Score: {multi_factor.get(\'feature_score\', \'N/A\'):.2f}")
-                        st.write(f"- Reasoning Score: {multi_factor.get(\'reasoning_score\', \'N/A\'):.2f}")
+                        st.write(f"- AI Confidence: {multi_factor.get('ai_confidence', 'N/A'):.2f}")
+                        st.write(f"- Feature Score: {multi_factor.get('feature_score', 'N/A'):.2f}")
+                        st.write(f"- Reasoning Score: {multi_factor.get('reasoning_score', 'N/A'):.2f}")
                 else:
                     st.write(f"**Confidence:** {confidence:.2f}")
                 if item.get("first_stage_type"):
