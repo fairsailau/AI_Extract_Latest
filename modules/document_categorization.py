@@ -10,8 +10,7 @@ import altair as alt
 from typing import Dict, Any, List, Optional, Tuple
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, 
-                   format=\'%(asctime)s - %(name)s - %(levelname)s - %(message)s\')
+logging.basicConfig(level=logging.INFO,                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # --- Merged Functions and UI from document_categorization (2).py and (3).py ---
