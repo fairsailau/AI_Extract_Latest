@@ -793,7 +793,8 @@ def display_confidence_visualization(confidence_data: dict, category: str, conta
 
     if overall_confidence >= 0.8: 
             explanations["overall"] = f"The system is highly confident that the document is a {category}."
-    elif overall_confidence >= 0.6: explanations["overall"] = f"The system has medium confidence that the document is a {category}. Manual review is recommended."
+    elif overall_confidence >= 0.6: 
+        explanations["overall"] = f"The system has medium confidence that the document is a {category}. Manual review is recommended."
     else: explanations["overall"] = f"The system has low confidence that the document is a {category}. Manual review is strongly recommended."
 
     factor_keys = ["ai_reported", "response_quality", "category_specificity", "reasoning_quality", "document_features_match"]
