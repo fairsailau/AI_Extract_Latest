@@ -462,7 +462,7 @@ def categorize_document(file_id: str, model: str, valid_categories: List[str]) -
     Categorize a single document using Box AI /ai/ask endpoint.
     """
     client = st.session_state.client
-    categories_string = ", ".join([f\"\"{cat}\\"\" for cat in valid_categories])
+    categories_string = ", ".join([f'"{cat}"' for cat in valid_categories])
     prompt = (f"""
     Analyze the provided document and determine its primary category.
     Respond ONLY with a JSON object containing the following keys:
@@ -513,7 +513,7 @@ def categorize_document_detailed(file_id: str, model: str, initial_category: str
     Perform a more detailed categorization analysis.
     """
     client = st.session_state.client
-    categories_string = ", ".join([f\"\"{cat}\\"\" for cat in valid_categories])
+    categories_string = ", ".join([f'"{cat}"' for cat in valid_categories])
     prompt = (f"""
     The initial analysis suggested the document might be a \t{initial_category}\t, but with low confidence.
     Please perform a more detailed analysis of the document content.
