@@ -734,7 +734,7 @@ def display_categorization_results(valid_categories: List[str]): # Adapted for d
                     range=["#d9534f", "#f0ad4e", "#5bc0de", "#5cb85c", "#5cb85c"]
                 )
                 arc = base.mark_arc(outerRadius=80, innerRadius=60).encode(color=alt.Color("confidence", scale=color_scale, legend=None))
-                text = base.mark_text(radius=0, fontSize=20, align='center', baseline='middle').encode(...)
+                text = base.mark_text(radius=0, fontSize=20, align='center', baseline='middle').encode(
                     text=alt.Text("confidence", format=".1%"), color=alt.value("black")
                 )
                 gauge = arc + text
