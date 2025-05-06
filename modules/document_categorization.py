@@ -782,24 +782,55 @@ def display_confidence_visualization(confidence_data: dict, category: str, conta
             logger.warning(f"Tooltip content for {factor_key} was not a string (type: {type(explanation_text_from_func)}). Using default.")
             final_explanation_text = f"Default explanation for {factor_name} (content error)."
 
-        with st.tooltip(final_explanation_text):
-            st.markdown(f"<div style=	padding-top: 8px;	>&#9432;</div>", unsafe_allow_html=True)
-
-def get_confidence_explanation(confidence_data: dict, category: str) -> dict:
-    """Generate human-readable explanations of confidence scores."""
+            # Replace st.tooltip with HTML title attribute in a span
+            # Ensure final_explanation_text is properly escaped for HTML attribute if it contains quotes
+            # For simplicity, we'll assume basic text for now. If complex HTML/quotes are in explanation, more robust escaping would be needed.
+            tooltip_html = f"<div style='padding-top: 8px;'><span title='{final_explanation_text}'>&#9432;</span></div>"
+            st.markdown(tooltip_html, unsafe_allow_html=True)t_confidence_explanation(confidence_data: dict, category: str) -> dict:
+    logger.info(f"[get_confidence_explanation] Called with confidence_data: {confidence_data}, category: {category}")
     explanations = {"overall": "", "factors": {}}
-    overall_confidence = confidence_data.get("overall", 0.0)
-
-    if overall_confidence >= 0.8: explanations["overall"] = f"The system is highly confident that the document is a \t{category}\t."
-    elif overall_confidence >= 0.6: explanations["overall"] = f"The system has medium confidence that the document is a \t{category}\t. Manual review is recommended."
-    else: explanations["overall"] = f"The system has low confidence that the document is a \t{category}\t. Manual review is strongly recommended."
-
-    explanations["factors"]["ai_reported"] = f"The AI model initially reported a confidence of {confidence_data.get("ai_reported", 0.0):.2f}. This is the raw confidence score from the AI model before any adjustments."
-    explanations["factors"]["response_quality"] = f"The quality of the AI response structure was assessed as {confidence_data.get("response_quality", 0.0):.2f}. Good structure includes clear category, confidence, and reasoning. Poor structure or parsing errors lower this score."
-    explanations["factors"]["category_specificity"] = f"The specificity of the assigned category (\t{category}\t) contributed {confidence_data.get("category_specificity", 0.0):.2f} to the score. Specific, non-\tOther\t categories score higher, reflecting a more precise classification."
-    explanations["factors"]["reasoning_quality"] = f"The AI\ts reasoning quality was rated {confidence_data.get("reasoning_quality", 0.0):.2f}, based on the length and presence of keywords like \tevidence\t or \tfeature\t. More detailed and relevant reasoning increases this score."
-    explanations["factors"]["document_features_match"] = f"The match between document features (e.g., file extension, size) and the typical characteristics of the assigned category was {confidence_data.get("document_features_match", 0.0):.2f}. This is a simplified factor and may be expanded in future versions."
+    # Ensure confidence_data is a dictionary
+    if not isinstance(confidence_data, dict):
+        logger.error(f"[get_confidence_explanation] confidence_data is not a dict: {confidence_data}. Returning default explanations.")
+        confidence_data = {} # Default to empty dict to avoid further errors
     
+    # Ensure category is a string
+    if not isinstance(category, str):
+        logger.error(f"[get_confidence_explanation] category is not a string: {category}. Using default category 'Unknown'.")
+        category = "Unknown"
+
+    overall_confidence = confidence_data.get("overall", 0.0)
+    # Ensure overall_confidence is float or int
+    if not isinstance(overall_confidence, (float, int)):
+        logger.warning(f"[get_confidence_explanation] overall_confidence is not a number: {overall_confidence}. Defaulting to 0.0.")
+        overall_confidence = 0.0
+
+    if overall_confidence >= 0.8: explanations["overall"] = f"The system is highly confident that the document is a {category}."
+    elif overall_confidence >= 0.6: explanations["overall"] = f"The system has medium confidence that the document is a {category}. Manual review is recommended."
+    else: explanations["overall"] = f"The system has low confidence that the document is a {category}. Manual review is strongly recommended."
+
+    factor_keys = ["ai_reported", "response_quality", "category_specificity", "reasoning_quality", "document_features_match"]
+    default_factor_messages = {
+        "ai_reported": "The AI model initially reported a confidence of {value:.2f}. This is the raw confidence score from the AI model before any adjustments.",
+        "response_quality": "The quality of the AI response structure was assessed as {value:.2f}. Good structure includes clear category, confidence, and reasoning. Poor structure or parsing errors lower this score.",
+        "category_specificity": "The specificity of the assigned category ({category_val}) contributed {value:.2f} to the score. Specific, non-\"Other\" categories score higher, reflecting a more precise classification.",
+        "reasoning_quality": "The AI's reasoning quality was rated {value:.2f}, based on the length and presence of keywords like \"evidence\" or \"feature\". More detailed and relevant reasoning increases this score.",
+        "document_features_match": "The match between document features (e.g., file extension, size) and the typical characteristics of the assigned category was {value:.2f}. This is a simplified factor and may be expanded in future versions."
+    }
+
+    for key in factor_keys:
+        value = confidence_data.get(key, 0.0) # Default to 0.0 if key is missing
+        if not isinstance(value, (float, int)):
+            logger.warning(f"[get_confidence_explanation] Factor {key} value is not a number: {value}. Defaulting to 0.0.")
+            value = 0.0
+        
+        # Use .format() for f-string like behavior with dynamic keys
+        if key == "category_specificity":
+            explanations["factors"][key] = default_factor_messages[key].format(category_val=category, value=value)
+        else:
+            explanations["factors"][key] = default_factor_messages[key].format(value=value)
+
+    logger.info(f"[get_confidence_explanation] Generated explanations: {explanations}")
     return explanations
 
 def configure_confidence_thresholds():
