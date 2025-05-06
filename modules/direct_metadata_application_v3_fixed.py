@@ -464,9 +464,7 @@ def apply_metadata_direct():
         else:
              logger.warning("Structured extraction selected, but no default template ID found in metadata_config.")
              st.warning("Structured extraction selected, but no default template configured. Files without specific mappings will be skipped.")
-    else:
-        st.warning("Structured extraction with a template was not selected or configured. Cannot apply metadata using a template.")
-        return
+
 
     # --- Get Categorization and Mapping Info --- 
     categorization_results = st.session_state.get("document_categorization", {}).get("results", {})
