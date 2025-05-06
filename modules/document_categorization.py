@@ -785,21 +785,7 @@ def display_confidence_visualization(confidence_data: dict, category: str, conta
             # Replace st.tooltip with HTML title attribute in a span
             # Ensure final_explanation_text is properly escaped for HTML attribute if it contains quotes
             # For simplicity, we'll assume basic text for now. If complex HTML/quotes are in explanation, more robust escaping would be needed.
-            tooltip_html = f"<div style='padding-top: 8px;'><span title='{final_explanation_text}'>&#9432;</span></div>"
-            st.markdown(tooltip_html, unsafe_allow_html=True)t_confidence_explanation(confidence_data: dict, category: str) -> dict:
-    logger.info(f"[get_confidence_explanation] Called with confidence_data: {confidence_data}, category: {category}")
-    explanations = {"overall": "", "factors": {}}
-    # Ensure confidence_data is a dictionary
-    if not isinstance(confidence_data, dict):
-        logger.error(f"[get_confidence_explanation] confidence_data is not a dict: {confidence_data}. Returning default explanations.")
-        confidence_data = {} # Default to empty dict to avoid further errors
-    
-    # Ensure category is a string
-    if not isinstance(category, str):
-        logger.error(f"[get_confidence_explanation] category is not a string: {category}. Using default category 'Unknown'.")
-        category = "Unknown"
-
-    overall_confidence = confidence_data.get("overall", 0.0)
+            tooltip_html = f"<div style='padding-top: 8px;'><span title='{            st.markdown(tooltip_html, unsafe_allow_html=True)ce = confidence_data.get("overall", 0.0)
     # Ensure overall_confidence is float or int
     if not isinstance(overall_confidence, (float, int)):
         logger.warning(f"[get_confidence_explanation] overall_confidence is not a number: {overall_confidence}. Defaulting to 0.0.")
