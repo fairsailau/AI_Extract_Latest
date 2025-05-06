@@ -770,23 +770,20 @@ def display_confidence_visualization(confidence_data: dict, category: str, conta
 
     for factor_key, factor_name in factors_display.items():
         value = confidence_data.get(factor_key)
-        explanation_text = explanations.get("factors", {}).get(factor_key, "No explanation available.")
+        explanation_text_from_func = explanations.get("factors", {}).get(factor_key, "No explanation available.")
         
-        if value is not None:
-            # Use columns for layout: Factor Name | Bar | Value | Help Icon
-            col_name, col_bar, col_value, col_help = container.columns([3, 4, 1, 1])
-            with col_name:
-                st.markdown(f"<div style=	padding-top: 8px;	>{factor_name}</div>", unsafe_allow_html=True)
-            with col_bar:
-                st.progress(value)
-            with col_value:
-                st.markdown(f"<div style=	padding-top: 8px;	>{value:.2f}</div>", unsafe_allow_html=True)
-                with col_help:
-                    # Use st.tooltip for better compatibility
-                    with st.tooltip(explanation_text):
-                        st.markdown(f"<div style=	padding-top: 8px;	>&#9432;</div>", unsafe_allow_html=True) # Unicode circled i for info
-        else:
-            container.markdown(f"- **{factor_name}:** N/A")
+        final_explanation_text = "Error: Tooltip text could not be generated." # Default error message
+        if isinstance(explanation_text_from_func, str):
+            if explanation_text_from_func.strip(): # Not empty or just whitespace
+                final_explanation_text = explanation_text_from_func
+            else: # Empty string
+                final_explanation_text = f"No specific explanation for {factor_name}."
+        else: # Not a string (e.g., None or other type)
+            logger.warning(f"Tooltip content for {factor_key} was not a string (type: {type(explanation_text_from_func)}). Using default.")
+            final_explanation_text = f"Default explanation for {factor_name} (content error)."
+
+        with st.tooltip(final_explanation_text):
+            st.markdown(f"<div style=	padding-top: 8px;	>&#9432;</div>", unsafe_allow_html=True)
 
 def get_confidence_explanation(confidence_data: dict, category: str) -> dict:
     """Generate human-readable explanations of confidence scores."""
