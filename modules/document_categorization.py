@@ -381,7 +381,7 @@ def configure_document_types(): # From version 2
             with col1_dtype:
                 current_name = doc_type_dict.get("name", "")
                 new_name = st.text_input(
-                    f"Name", 
+                    f"Name {i+1}", 
                     value=current_name, 
                     key=f"doc_type_name_{i}", 
                     disabled=is_other_type, 
@@ -401,7 +401,7 @@ def configure_document_types(): # From version 2
             with col2_dtype:
                 current_desc = doc_type_dict.get("description", "")
                 new_desc = st.text_area(
-                    f"Description", 
+                    f"Description {i+1}", 
                     value=current_desc, 
                     key=f"doc_type_desc_{i}", 
                     height=50, 
@@ -786,4 +786,3 @@ def collect_user_feedback(file_id, result, valid_categories: List[str]): # Adapt
 # Ensure this file can be imported without running the Streamlit app directly
 if __name__ == "__main__":
     pass
-
