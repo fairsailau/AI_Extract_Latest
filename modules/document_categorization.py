@@ -723,7 +723,7 @@ def display_categorization_results(valid_categories: List[str]): # Adapted for d
                 else:
                     st.write(f"**Confidence:** {confidence:.2f}")
                 if item.get("first_stage_type"):
-                    st.write(f"_Initial category (low confidence): {item[\'first_stage_type\']} ({item[\'first_stage_confidence\']:.2f})_")
+                    st.write(f"_Initial category (low confidence): {item['first_stage_type']} ({item['first_stage_confidence']:.2f})_")
                 with st.expander("AI Reasoning", expanded=False):
                     st.write(reasoning)
             with col2_detail:
