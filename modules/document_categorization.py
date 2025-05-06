@@ -652,7 +652,7 @@ def parse_categorization_response(response_text: str, valid_categories: List[str
         if reasoning_match:
             reasoning = reasoning_match.group(1).strip()
         else:
-             logger.warning(f"Could not find 'Reasoning:' line in response: {{response_text[:500]}}")
+            logger.warning(f"Could not find 'Reasoning:' line in response: {{response_text[:500]}}")
             lines = response_text.split('\n')
             reasoning_lines = [line for line in lines if not line.lower().startswith("category:") and not line.lower().startswith("confidence:")]
             reasoning = "\n".join(reasoning_lines).strip()
